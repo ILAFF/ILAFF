@@ -29,7 +29,7 @@ setup(
     package_dir={"": "src"},
     packages=find_packages(where="src"),
     python_requires=">=3.5, <4",
-    install_requires=["numpy"],
+    install_requires=["numpy", "attrs"],
     project_urls={
         "Bug Reports": "https://github.com/ILAFF/ILAFF/issues",
         "Source": "https://github.com/ILAFF/ILAFF/",
