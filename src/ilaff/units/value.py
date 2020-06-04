@@ -51,29 +51,6 @@ class Value:
         else:
             return (self.value * scale).__format__(format_str)
 
-    def _match_scale(self, other: "Value") -> Tuple[Scale, Any, Any]:
-        if other.unit == Scalar:
-            shared: Optional[Scale] = self.scale
-        elif self.unit == Scalar:
-            shared = other.scale
-        else:
-            shared = self.scale.shared(other.scale)
-
-        if shared is None:
-            raise ValueError("Can't match scales {} and {}".format(self.scale, other.scale))
-
-        if self.scale == shared or self.unit == Scalar:
-            self_value = self.value
-        else:
-            self_value = self.value * self.scale.to(shared, self.unit)
-
-        if other.scale == shared or other.unit == Scalar:
-            other_value = other.value
-        else:
-            other_value = other.value * other.scale.to(shared, other.unit)
-
-        return (shared, self_value, other_value)
-
     def __neg__(self) -> "Value":
         return Value(
             -self.value,
@@ -84,18 +61,19 @@ class Value:
     def __add__(self, other: Any) -> "Value":
         if isinstance(other, Value):
             if self.unit != other.unit:
-                raise ValueError("Can't add {} to {}".format(self.unit, other.unit))
+                raise ValueError("Can't add values: incompatible mass dimensions {} and {}".format(self.unit.mass_dim, other.unit.mass_dim))
 
-            scale, self_value, other_value = self._match_scale(other)
+            if self.unit != Scalar and self.scale != other.scale:
+                raise ValueError("Can't add values: incompatible scales")
 
             return Value(
-                self_value + other_value,
+                self.value + other.value,
                 self.unit,
-                scale,
+                self.scale,
             )
         else:
             if self.unit != Scalar:
-                raise ValueError("Can't add {} to {}".format(self.unit, Scalar))
+                raise ValueError("Can't add scalar to mass dimension {}".format(self.unit.mass_dim))
 
             return Value(
                 self.value + other,
@@ -105,7 +83,7 @@ class Value:
 
     def __radd__(self, other: Any) -> "Value":
         if self.unit != Scalar:
-            raise ValueError("Can't add {} to {}".format(self.unit, Scalar))
+            raise ValueError("Can't add mass dimension {} to scalar".format(self.unit.mass_dim))
 
         return Value(
             other + self.value,
@@ -116,18 +94,19 @@ class Value:
     def __sub__(self, other: Any) -> "Value":
         if isinstance(other, Value):
             if self.unit != other.unit:
-                raise ValueError("Can't subtract {} from {}".format(other.unit, self.unit))
+                raise ValueError("Can't subtract values: incompatible mass dimensions {} and {}".format(self.unit.mass_dim, other.unit.mass_dim))
 
-            scale, self_value, other_value = self._match_scale(other)
+            if self.unit != Scalar and self.scale != other.scale:
+                raise ValueError("Can't subtract values: incompatible scales")
 
             return Value(
-                self_value - other_value,
+                self.value - other.value,
                 self.unit,
-                scale,
+                self.scale,
             )
         else:
             if self.unit != Scalar:
-                raise ValueError("Can't subtract {} from {}".format(Scalar, self.unit))
+                raise ValueError("Can't subtract scalar from mass dimension {}".format(self.unit.mass_dim))
 
             return Value(
                 self.value - other,
@@ -137,7 +116,7 @@ class Value:
 
     def __rsub__(self, other: Any) -> "Value":
         if self.unit != Scalar:
-            raise ValueError("Can't subtract {} from {}".format(Scalar, self.unit))
+            raise ValueError("Can't subtract mass dimension {} from scalar".format(self.unit.mass_dim))
 
         return Value(
             other - self.value,
@@ -147,10 +126,17 @@ class Value:
 
     def __mul__(self, other: Any) -> "Value":
         if isinstance(other, Value):
-            scale, self_value, other_value = self._match_scale(other)
+            if other.unit == Scalar:
+                scale = self.scale
+            elif self.unit == Scalar:
+                scale = other.scale
+            elif self.scale == other.scale:
+                scale = self.scale
+            else:
+                raise ValueError("Can't multiply values: incompatible scales")
 
             return Value(
-                self_value * other_value,
+                self.value * other.value,
                 self.unit * other.unit,
                 scale,
             )
@@ -170,10 +156,17 @@ class Value:
 
     def __truediv__(self, other: Any) -> "Value":
         if isinstance(other, Value):
-            scale, self_value, other_value = self._match_scale(other)
+            if other.unit == Scalar:
+                scale = self.scale
+            elif self.unit == Scalar:
+                scale = other.scale
+            elif self.scale == other.scale:
+                scale = self.scale
+            else:
+                raise ValueError("Can't divide values: incompatible scales")
 
             return Value(
-                self_value / other_value,
+                self.value / other.value,
                 self.unit / other.unit,
                 scale,
             )
