@@ -26,8 +26,11 @@ setup(
     keywords="lattice analysis qcd",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
-    python_requires=">=3.7, <4",
-    install_requires=["numpy"],
+    python_requires=">=3.6, <4",
+    install_requires=[
+        "dataclasses;python_version<'3.7'",
+        "numpy",
+    ],
     project_urls={
         "Bug Reports": "https://github.com/ILAFF/ILAFF/issues",
         "Source": "https://github.com/ILAFF/ILAFF/",
