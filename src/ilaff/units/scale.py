@@ -26,7 +26,7 @@ class Physical(Scale):
         return (1.0, "")
 
 
-@attr.s(frozen=True, auto_attribs=True, cmp=False)
+@attr.s(frozen=True, auto_attribs=True, eq=False)
 class Lattice(Scale):
     scale: MutableMapping[Scale, float] = attr.Factory(dict)
 
