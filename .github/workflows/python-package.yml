@@ -25,7 +25,7 @@ jobs:
         pip install pylint flake8 pytest .
     - name: Lint with pylint
       run: |
-        pylint ilaff
+        pylint --exit-zero pylint
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names
