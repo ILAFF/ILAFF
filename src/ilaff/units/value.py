@@ -1,5 +1,5 @@
 import abc
-import attr
+from dataclasses import dataclass
 from typing import Any, Optional, Tuple
 
 from .unit import Unit, Scalar
@@ -21,7 +21,7 @@ class Scale(abc.ABC):
         raise NotImplementedError
 
 
-@attr.s(frozen=True, auto_attribs=True)
+@dataclass(frozen=True)
 class Value:
     value: Any
     unit: Unit
