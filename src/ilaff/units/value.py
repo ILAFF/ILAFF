@@ -6,50 +6,130 @@ from .unit import Unit, Scalar
 
 
 class Scale(abc.ABC):
-    def shared(self, other: "Scale") -> "Optional[Scale]":
-        if self == other:
-            return self
-        return None
-
-    def to(self, other: "Scale", unit: Unit) -> float:
-        if self == other:
-            return 1.0
-        raise ValueError("Can't scale {} to {}".format(self, other))
-
     @abc.abstractmethod
-    def unit(self, unit: Unit) -> Tuple[float, str]:
+    def unit(self, unit: Unit) -> Tuple["Value", str]:
         raise NotImplementedError
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False, order=False)
 class Value:
     value: Any
     unit: Unit
     scale: Scale
 
-    def in_units(self, scale: Scale) -> "Value":
-        if self.scale == scale:
+    def set_scale(self, curr: "Value", new: "Value") -> "Value":
+        if self.scale == new.scale:
             return self
         else:
+            if self.scale != curr.scale:
+                raise ValueError("Error setting scale: Can't set scale for {} with {}".format(self, curr))
+            if curr.unit != new.unit:
+                raise ValueError("Error setting scale: {} and {} have different mass dimensions".format(curr, new))
             return Value(
-                self.value * self.scale.to(scale, self.unit),
+                self.value * self.unit.scale(
+                    (new.value / curr.value)**(1 / curr.unit.mass_dim)
+                ),
                 self.unit,
-                scale,
+                new.scale,
             )
 
+    def in_unit(self, val: "Value") -> Any:
+        try:
+            res = self / val
+        except ValueError:
+            raise ValueError("Can't convert units: incompatible scales")
+        if res.unit.mass_dim != 0:
+            raise ValueError("Can't convert units: incompatible mass dimensions {} and {}".format(self.unit.mass_dim, val.unit.mass_dim))
+        return res.value
+
     def __str__(self) -> str:
-        scale, unit = self.scale.unit(self.unit)
-        if unit != "":
-            return str(self.value * scale) + " " + unit
+        unit, suffix = self.scale.unit(self.unit)
+        if suffix != "":
+            return str(self.in_unit(unit)) + " " + suffix
         else:
-            return str(self.value * scale)
+            return str(self.in_unit(unit))
 
     def __format__(self, format_str: str) -> str:
-        scale, unit = self.scale.unit(self.unit)
+        unit, suffix = self.scale.unit(self.unit)
         if unit != "":
-            return (self.value * scale).__format__(format_str) + " " + unit
+            return self.in_unit(unit).__format__(format_str) + " " + suffix
         else:
-            return (self.value * scale).__format__(format_str)
+            return self.in_unit(unit).__format__(format_str)
+
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, Value):
+            if self.unit != other.unit:
+                raise ValueError("Can't compare values: incompatible mass dimensions {} and {}".format(self.unit.mass_dim, other.unit.mass_dim))
+
+            if self.unit != Scalar and self.scale != other.scale:
+                raise ValueError("Can't compare values: incompatible scales")
+
+            return self.value == other.value
+        else:
+            if self.unit != Scalar:
+                raise ValueError("Can't compare scalar to mass dimension {}".format(self.unit.mass_dim))
+
+            return self.value == other
+
+    def __lt__(self, other: Any) -> bool:
+        if isinstance(other, Value):
+            if self.unit != other.unit:
+                raise ValueError("Can't compare values: incompatible mass dimensions {} and {}".format(self.unit.mass_dim, other.unit.mass_dim))
+
+            if self.unit != Scalar and self.scale != other.scale:
+                raise ValueError("Can't compare values: incompatible scales")
+
+            return self.value < other.value
+        else:
+            if self.unit != Scalar:
+                raise ValueError("Can't compare scalar to mass dimension {}".format(self.unit.mass_dim))
+
+            return self.value < other
+
+    def __le__(self, other: Any) -> bool:
+        if isinstance(other, Value):
+            if self.unit != other.unit:
+                raise ValueError("Can't compare values: incompatible mass dimensions {} and {}".format(self.unit.mass_dim, other.unit.mass_dim))
+
+            if self.unit != Scalar and self.scale != other.scale:
+                raise ValueError("Can't compare values: incompatible scales")
+
+            return self.value <= other.value
+        else:
+            if self.unit != Scalar:
+                raise ValueError("Can't compare scalar to mass dimension {}".format(self.unit.mass_dim))
+
+            return self.value <= other
+
+    def __gt__(self, other: Any) -> bool:
+        if isinstance(other, Value):
+            if self.unit != other.unit:
+                raise ValueError("Can't compare values: incompatible mass dimensions {} and {}".format(self.unit.mass_dim, other.unit.mass_dim))
+
+            if self.unit != Scalar and self.scale != other.scale:
+                raise ValueError("Can't compare values: incompatible scales")
+
+            return self.value > other.value
+        else:
+            if self.unit != Scalar:
+                raise ValueError("Can't compare scalar to mass dimension {}".format(self.unit.mass_dim))
+
+            return self.value > other
+
+    def __ge__(self, other: Any) -> bool:
+        if isinstance(other, Value):
+            if self.unit != other.unit:
+                raise ValueError("Can't compare values: incompatible mass dimensions {} and {}".format(self.unit.mass_dim, other.unit.mass_dim))
+
+            if self.unit != Scalar and self.scale != other.scale:
+                raise ValueError("Can't compare values: incompatible scales")
+
+            return self.value >= other.value
+        else:
+            if self.unit != Scalar:
+                raise ValueError("Can't compare scalar to mass dimension {}".format(self.unit.mass_dim))
+
+            return self.value >= other
 
     def __neg__(self) -> "Value":
         return Value(
