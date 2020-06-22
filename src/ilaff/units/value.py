@@ -7,7 +7,7 @@ from .unit import Unit, Scalar
 
 class Scale(abc.ABC):
     @abc.abstractmethod
-    def unit(self, unit: Unit) -> Tuple[float, str]:
+    def unit(self, unit: Unit) -> Tuple["Value", str]:
         raise NotImplementedError
 
 
@@ -24,7 +24,7 @@ class Value:
             if self.scale != curr.scale:
                 raise ValueError("Error setting scale: Can't set scale for {} with {}".format(self, curr))
             if curr.unit != new.unit:
-                raise ValueError("Error setting scale: {} and {} have different mass dimensions".format(curr, other))
+                raise ValueError("Error setting scale: {} and {} have different mass dimensions".format(curr, new))
             return Value(
                 self.value * self.unit.scale(
                     (new.value / curr.value)**(1 / curr.unit.mass_dim)
@@ -43,18 +43,18 @@ class Value:
         return res.value
 
     def __str__(self) -> str:
-        scale, unit = self.scale.unit(self.unit)
-        if unit != "":
-            return str(self.value * scale) + " " + unit
+        unit, suffix = self.scale.unit(self.unit)
+        if suffix != "":
+            return str(self.in_unit(unit)) + " " + suffix
         else:
-            return str(self.value * scale)
+            return str(self.in_unit(unit))
 
     def __format__(self, format_str: str) -> str:
-        scale, unit = self.scale.unit(self.unit)
+        unit, suffix = self.scale.unit(self.unit)
         if unit != "":
-            return (self.value * scale).__format__(format_str) + " " + unit
+            return self.in_unit(unit).__format__(format_str) + " " + suffix
         else:
-            return (self.value * scale).__format__(format_str)
+            return self.in_unit(unit).__format__(format_str)
 
     def __eq__(self, other: Any) -> bool:
         if isinstance(other, Value):

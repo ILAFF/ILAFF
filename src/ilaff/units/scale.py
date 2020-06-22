@@ -1,29 +1,39 @@
 from dataclasses import dataclass, field
 from typing import Tuple, Optional, MutableMapping
 
-from .unit import Unit
+from .unit import Unit, Mass, Length, Scalar
 from .value import Scale, Value
 
 
 @dataclass(frozen=True)
 class Physical(Scale):
-    def unit(self, unit: Unit) -> Tuple[float, str]:
+    def unit(self, unit: Unit) -> Tuple[Value, str]:
         if unit.mass_dim == 1:
-            return (1000.0, "MeV")
+            return (GeV, "GeV")
         if unit.mass_dim == -1:
-            return (0.1973269788, "fm")
+            return (fm, "fm")
         if unit.mass_dim > 0:
-            return (1.0, "GeV^{}".format(unit.mass_dim))
+            return (GeV**unit.mass_dim, "GeV^{}".format(unit.mass_dim))
         if unit.mass_dim < 0:
-            return (1.0 / 0.1973269788**unit.mass_dim, "fm^{}".format(-unit.mass_dim))
-        return (1.0, "")
+            return (fm**(-unit.mass_dim), "fm^{}".format(-unit.mass_dim))
+        return (one, "")
 
 
 @dataclass(frozen=True, eq=False)
 class Lattice(Scale):
-    def unit(self, unit: Unit) -> Tuple[float, str]:
+    def unit(self, unit: Unit) -> Tuple[Value, str]:
         if unit.mass_dim == -1:
-            return (1.0, "a")
+            return (a(self), "a")
         if unit.mass_dim != 0:
-            return (1.0, "a^{}".format(-unit.mass_dim))
-        return (1.0, "")
+            return (a(self)**(-unit.mass_dim), "a^{}".format(-unit.mass_dim))
+        return (one, "")
+
+
+MeV = Value(0.001, Mass, Physical())
+GeV = Value(1.0, Mass, Physical())
+fm = Value(1.0 / 0.1973269788, Length, Physical())
+one = Value(1.0, Scalar, Physical())
+
+
+def a(scale: Scale) -> Value:
+    return Value(1.0, Length, scale)

@@ -9,10 +9,10 @@ or other raw value by one of the provided unit values (e.g. units.MeV,
 units.GeV, units.fm, or units.a(scale)).
 
 Examples:
-    >>> str(0.135 * MeV)
-    '0.135 MeV'
+    >>> str(135.0 * MeV)
+    '0.135 GeV'
     >>> str(0.0046 * fm**2)
-    '0.004599999999999999 fm^2'
+    '0.0046 fm^2'
     >>> import numpy
     >>> latt = Lattice()
     >>> numpy.array(range(0, 2)) * a(latt)
@@ -28,7 +28,7 @@ of that lattice spacing.
 Examples:
     >>> a1 = 0.1 * fm
     >>> str(0.49 / a1)
-    '966.9021961200001 MeV'
+    '0.9669021961200001 GeV'
     >>> import numpy, tempfile
     >>> with tempfile.NamedTemporaryFile() as tmpfile:
     ...     n = tmpfile.write(b'0.49 0.48 0.50')
@@ -64,11 +64,11 @@ Examples:
     >>> str(m2**3)
     '6.028568000000001e-06 GeV^6'
     >>> str(m2**-1)
-    '2.139447063864596 fm^2'
+    '2.1394470638645964 fm^2'
     >>> str(m2.sqrt())
-    '134.90737563232042 MeV'
+    '0.13490737563232041 GeV'
     >>> str((m2**3).root(6))
-    '134.90737563232045 MeV'
+    '0.13490737563232044 GeV'
 
 
 Values with compatible scales can be added, subtracted, multiplied, divided,
@@ -79,9 +79,9 @@ Examples:
     >>> n = 0.135 * GeV
     >>> o = 0.152 * GeV
     >>> str(m + o)
-    '287.00000000000006 MeV'
+    '0.28700000000000003 GeV'
     >>> str(m - o)
-    '-16.999999999999986 MeV'
+    '-0.016999999999999987 GeV'
     >>> str(m * o)
     '0.02052 GeV^2'
     >>> str(m / o)
@@ -110,7 +110,7 @@ Examples:
         ...
     ValueError: Can't add values: incompatible scales
     >>> str(m + n.set_scale(a(latt), 0.1 * fm))
-    '332.32697880000006 MeV'
+    '0.33232697880000006 GeV'
 
 
 Values can be extracted in specific units using the in_unit method.
@@ -125,14 +125,6 @@ Example:
     0.6841436524340078
 """
 
-from .scale import Physical, Lattice
+from .scale import Physical, Lattice, MeV, GeV, fm, a, one
 from .unit import Mass, Length, Scalar
 from .value import Value, Scale
-
-MeV = Value(0.001, Mass, Physical())
-GeV = Value(1.0, Mass, Physical())
-fm = Value(1.0 / 0.1973269788, Length, Physical())
-
-
-def a(scale: Scale) -> Value:
-    return Value(1.0, Length, scale)
