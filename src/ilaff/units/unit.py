@@ -1,7 +1,7 @@
-import attr
+from dataclasses import dataclass
 
 
-@attr.s(frozen=True, auto_attribs=True)
+@dataclass(frozen=True)
 class Unit:
     mass_dim: int
 

@@ -1,11 +1,11 @@
-import attr
+from dataclasses import dataclass, field
 from typing import Tuple, Optional, MutableMapping
 
 from .unit import Unit
 from .value import Scale, Value
 
 
-@attr.s(frozen=True, auto_attribs=True)
+@dataclass(frozen=True)
 class Physical(Scale):
     def shared(self, other: Scale) -> Optional[Scale]:
         if self == other:
@@ -26,9 +26,9 @@ class Physical(Scale):
         return (1.0, "")
 
 
-@attr.s(frozen=True, auto_attribs=True, eq=False)
+@dataclass(frozen=True, eq=False)
 class Lattice(Scale):
-    scale: MutableMapping[Scale, float] = attr.Factory(dict)
+    scale: MutableMapping[Scale, float] = field(default_factory=dict)
 
     def shared(self, other: Scale) -> Optional[Scale]:
         if self == other:

@@ -19,7 +19,6 @@ setup(
         "Development Status :: 3 - Alpha",
         # "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.5",
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
@@ -28,8 +27,11 @@ setup(
     keywords="lattice analysis qcd",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
-    python_requires=">=3.5, <4",
-    install_requires=["numpy", "attrs"],
+    python_requires=">=3.6, <4",
+    install_requires=[
+        "dataclasses;python_version<'3.7'",
+        "numpy",
+    ],
     project_urls={
         "Bug Reports": "https://github.com/ILAFF/ILAFF/issues",
         "Source": "https://github.com/ILAFF/ILAFF/",
