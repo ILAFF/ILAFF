@@ -16,9 +16,7 @@ Examples:
     >>> import numpy
     >>> latt = Lattice()
     >>> numpy.array(range(0, 2)) * a(latt)
-    array([Value(value=0.0, unit=Unit(mass_dim=-1), scale=Lattice()),
-           Value(value=1.0, unit=Unit(mass_dim=-1), scale=Lattice())],
-          dtype=object)
+    Value(value=array([0., 1.]), unit=Unit(mass_dim=-1), scale=Lattice())
 
 
 To load values in lattice units directly into physical units based on a known
@@ -34,10 +32,7 @@ Examples:
     ...     n = tmpfile.write(b'0.49 0.48 0.50')
     ...     tmpfile.flush()
     ...     numpy.loadtxt(tmpfile.name) / a1
-    array([Value(value=0.9669021961200001, unit=Unit(mass_dim=1), scale=Physical()),
-           Value(value=0.9471694982400001, unit=Unit(mass_dim=1), scale=Physical()),
-           Value(value=0.986634894, unit=Unit(mass_dim=1), scale=Physical())],
-          dtype=object)
+    Value(value=array([0.9669022 , 0.9471695 , 0.98663489]), unit=Unit(mass_dim=1), scale=Physical())
 
 
 It is also possible to use the Value constructor directly to initialise
