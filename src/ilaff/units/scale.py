@@ -7,13 +7,6 @@ from .value import Scale, Value
 
 @dataclass(frozen=True)
 class Physical(Scale):
-    def shared(self, other: Scale) -> Optional[Scale]:
-        if self == other:
-            return other
-        if other.shared(self) == self:
-            return self
-        return None
-
     def unit(self, unit: Unit) -> Tuple[float, str]:
         if unit.mass_dim == 1:
             return (1000.0, "MeV")
@@ -28,33 +21,6 @@ class Physical(Scale):
 
 @dataclass(frozen=True, eq=False)
 class Lattice(Scale):
-    scale: MutableMapping[Scale, float] = field(default_factory=dict)
-
-    def shared(self, other: Scale) -> Optional[Scale]:
-        if self == other:
-            return self
-        if other in self.scale:
-            return other
-        if isinstance(other, Lattice):
-            scales = [scale for scale in self.scale.keys() if scale in other.scale and not isinstance(scale, Lattice)]
-            if len(scales) == 1:
-                return scales[0]
-        return None
-
-    def to(self, other: Scale, unit: Unit) -> float:
-        if self == other:
-            return 1.0
-        if other in self.scale:
-            return unit.scale(self.scale[other])
-        raise ValueError("Can't scale {} to {}".format(self, other))
-
-    def set_scale(self, value: Value, other: Value):
-        if value.scale != self:
-            raise ValueError("Error setting scale: Can't set scale for {} with {}".format(self, value))
-        if value.unit != other.unit:
-            raise ValueError("Error setting scale: {} and {} have different mass dimensions".format(value, other))
-        self.scale[other.scale] = (other.value / value.value)**(1 / value.unit.mass_dim)
-
     def unit(self, unit: Unit) -> Tuple[float, str]:
         if unit.mass_dim == -1:
             return (1.0, "a")
