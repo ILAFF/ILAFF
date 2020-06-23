@@ -280,3 +280,8 @@ class Value:
 
     def sqrt(self) -> "Value":
         return self.root(2)
+
+    __array_ufunc__ = None
+    """Ensures proper numpy integration by preventing numpy from
+    distributing across the numpy array before the value is unwrapped by
+    rmul. Only works for numpy >= 1.13"""
