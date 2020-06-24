@@ -53,11 +53,16 @@ class Value:
     def __format__(self, format_str: str) -> str:
         unit, suffix = self.scale.unit(self.unit)
         if suffix != "":
-            return self.in_unit(unit).__format__(format_str) + " " + suffix
+            return ("{:" + format_str + "} {}").format(
+                self.in_unit(unit),
+                suffix,
+            )
         else:
-            return self.in_unit(unit).__format__(format_str)
+            return ("{:" + format_str + "}").format(
+                self.in_unit(unit),
+            )
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: Any) -> Any:
         if isinstance(other, Value):
             if self.unit != other.unit:
                 raise ValueError(
@@ -75,7 +80,7 @@ class Value:
 
             return self.value == other
 
-    def __lt__(self, other: Any) -> bool:
+    def __lt__(self, other: Any) -> Any:
         if isinstance(other, Value):
             if self.unit != other.unit:
                 raise ValueError(
@@ -93,7 +98,7 @@ class Value:
 
             return self.value < other
 
-    def __le__(self, other: Any) -> bool:
+    def __le__(self, other: Any) -> Any:
         if isinstance(other, Value):
             if self.unit != other.unit:
                 raise ValueError(
@@ -111,7 +116,7 @@ class Value:
 
             return self.value <= other
 
-    def __gt__(self, other: Any) -> bool:
+    def __gt__(self, other: Any) -> Any:
         if isinstance(other, Value):
             if self.unit != other.unit:
                 raise ValueError(
@@ -129,7 +134,7 @@ class Value:
 
             return self.value > other
 
-    def __ge__(self, other: Any) -> bool:
+    def __ge__(self, other: Any) -> Any:
         if isinstance(other, Value):
             if self.unit != other.unit:
                 raise ValueError(

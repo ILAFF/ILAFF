@@ -1,8 +1,8 @@
 from ilaff import units
-import pytest
+import pytest  # type: ignore
 
 
-def test_mismatched():
+def test_mismatched() -> None:
     latt = units.Lattice()
     latt2 = units.Lattice()
 
@@ -19,7 +19,7 @@ def test_mismatched():
         a / a.set_scale(a, 0.0904 * units.fm)
 
 
-def test_convert():
+def test_convert() -> None:
     latt = units.Lattice()
     latt2 = units.Lattice()
 
@@ -51,7 +51,7 @@ def test_convert():
     assert m.in_unit(units.GeV) == pytest.approx(1.04775386973)
 
 
-def test_format():
+def test_format() -> None:
     assert str(units.Length) == "length"
     assert str(units.Mass) == "mass"
     assert str(units.Length**4) == "length^4"
@@ -62,7 +62,7 @@ def test_format():
         units.Value(
             0.0,
             units.Length,
-            units.Scale()
+            units.Scale()  # type: ignore
         )
 
     latt = units.Lattice()
@@ -88,7 +88,7 @@ def test_format():
     assert "{:.8f}".format(t_current * m_N) == '2.45000000'
 
 
-def test_roots():
+def test_roots() -> None:
     assert units.unit.Unit(-4).sqrt() == units.unit.Unit(-2)
 
     latt = units.Lattice()
@@ -138,7 +138,7 @@ def test_roots():
     ) == pytest.approx((0.068**3 / 5)**0.5 / 0.0913**2)
 
 
-def test_cmp():
+def test_cmp() -> None:
     latt = units.Lattice()
     t_current = (21 - 16) * units.a(latt)
     t_current_2 = 5 * units.a(latt)
@@ -233,7 +233,7 @@ def test_cmp():
     assert 0.4 >= m_phys * t_phys
 
 
-def test_arithmetic():
+def test_arithmetic() -> None:
     latt = units.Lattice()
     t_current = (21 - 16) * units.a(latt)
     t_current_2 = 5 * units.a(latt)

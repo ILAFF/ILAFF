@@ -26,6 +26,10 @@ setup(
     ],
     keywords="lattice analysis qcd",
     package_dir={"": "src"},
+    package_data={
+        'ilaff': ['py.typed'],
+    },
+    include_package_data=True,
     packages=find_packages(where="src"),
     python_requires=">=3.6, <4",
     install_requires=[
