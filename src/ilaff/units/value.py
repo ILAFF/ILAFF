@@ -7,8 +7,7 @@ from .unit import Unit, Scalar
 
 class Scale(abc.ABC):
     @abc.abstractmethod
-    def unit(self, unit: Unit) -> Tuple["Value", str]:
-        raise NotImplementedError
+    def unit(self, unit: Unit) -> Tuple["Value", str]: ...
 
 
 @dataclass(frozen=True, eq=False, order=False)
@@ -18,20 +17,19 @@ class Value:
     scale: Scale
 
     def set_scale(self, curr: "Value", new: "Value") -> "Value":
-        if self.scale == new.scale:
-            return self
-        else:
-            if self.scale != curr.scale:
-                raise ValueError("Error setting scale: Can't set scale for {} with {}".format(self, curr))
-            if curr.unit != new.unit:
-                raise ValueError("Error setting scale: {} and {} have different mass dimensions".format(curr, new))
-            return Value(
-                self.value * self.unit.scale(
-                    (new.value / curr.value)**(1 / curr.unit.mass_dim)
-                ),
-                self.unit,
-                new.scale,
-            )
+        if self.scale != curr.scale:
+            raise ValueError("Error setting scale: Can't set scale for {} with {}".format(self, curr))
+        if curr.unit != new.unit:
+            raise ValueError("Error setting scale: {} and {} have different mass dimensions".format(curr, new))
+        if curr.scale == new.scale:
+            raise ValueError("Error setting scale: Initial and final scale are the same")
+        return Value(
+            self.value * self.unit.scale(
+                (new.value / curr.value)**(1 / curr.unit.mass_dim)
+            ),
+            self.unit,
+            new.scale,
+        )
 
     def in_unit(self, val: "Value") -> Any:
         try:
@@ -51,7 +49,7 @@ class Value:
 
     def __format__(self, format_str: str) -> str:
         unit, suffix = self.scale.unit(self.unit)
-        if unit != "":
+        if suffix != "":
             return self.in_unit(unit).__format__(format_str) + " " + suffix
         else:
             return self.in_unit(unit).__format__(format_str)
