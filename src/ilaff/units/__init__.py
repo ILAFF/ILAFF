@@ -125,5 +125,11 @@ Example:
 """
 
 from .scale import Physical, Lattice, MeV, GeV, fm, a, one
-from .unit import Mass, Length, Scalar
+from .unit import Unit, Mass, Length, Scalar
 from .value import Value, Scale
+
+__all__ = [
+    'Physical', 'Lattice', 'MeV', 'GeV', 'fm', 'a', 'one',
+    'Unit', 'Mass', 'Length', 'Scalar',
+    'Value', 'Scale',
+]

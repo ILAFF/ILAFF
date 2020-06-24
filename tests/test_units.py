@@ -10,13 +10,13 @@ def test_mismatched():
     a2 = units.Value(1.0, units.Length, latt2)
 
     with pytest.raises(ValueError):
-        two_a = a + a2
+        a + a2
 
     with pytest.raises(ValueError):
-        two_a = a + a2
+        a + a2
 
     with pytest.raises(ValueError):
-        two_a = a / a.set_scale(a, 0.0904 * units.fm)
+        a / a.set_scale(a, 0.0904 * units.fm)
 
 
 def test_convert():
@@ -59,7 +59,7 @@ def test_format():
     assert str(units.Scalar) == "scalar"
 
     with pytest.raises(TypeError):
-        v = units.Value(
+        units.Value(
             0.0,
             units.Length,
             units.Scale()
@@ -136,6 +136,7 @@ def test_roots():
     ).in_unit(
         units.fm**-2
     ) == pytest.approx((0.068**3 / 5)**0.5 / 0.0913**2)
+
 
 def test_cmp():
     latt = units.Lattice()
@@ -237,7 +238,6 @@ def test_arithmetic():
     t_current = (21 - 16) * units.a(latt)
     t_current_2 = 5 * units.a(latt)
     t_sink = (30 - 16) * units.a(latt)
-    m_pi_squared = 0.004624 / units.a(latt)**2
     m_N = 0.49 / units.a(latt)
 
     assert -t_current == (-5) * units.a(latt)

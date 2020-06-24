@@ -1,6 +1,6 @@
 import abc
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple
+from typing import Any, Tuple
 
 from .unit import Unit, Scalar
 
@@ -37,7 +37,10 @@ class Value:
         except ValueError:
             raise ValueError("Can't convert units: incompatible scales")
         if res.unit.mass_dim != 0:
-            raise ValueError("Can't convert units: incompatible mass dimensions {} and {}".format(self.unit.mass_dim, val.unit.mass_dim))
+            raise ValueError(
+                "Can't convert units: incompatible mass dimensions {} and {}"
+                .format(self.unit.mass_dim, val.unit.mass_dim)
+            )
         return res.value
 
     def __str__(self) -> str:
@@ -57,7 +60,10 @@ class Value:
     def __eq__(self, other: Any) -> bool:
         if isinstance(other, Value):
             if self.unit != other.unit:
-                raise ValueError("Can't compare values: incompatible mass dimensions {} and {}".format(self.unit.mass_dim, other.unit.mass_dim))
+                raise ValueError(
+                    "Can't compare values: incompatible mass dimensions {} and {}"
+                    .format(self.unit.mass_dim, other.unit.mass_dim)
+                )
 
             if self.unit != Scalar and self.scale != other.scale:
                 raise ValueError("Can't compare values: incompatible scales")
@@ -72,7 +78,10 @@ class Value:
     def __lt__(self, other: Any) -> bool:
         if isinstance(other, Value):
             if self.unit != other.unit:
-                raise ValueError("Can't compare values: incompatible mass dimensions {} and {}".format(self.unit.mass_dim, other.unit.mass_dim))
+                raise ValueError(
+                    "Can't compare values: incompatible mass dimensions {} and {}"
+                    .format(self.unit.mass_dim, other.unit.mass_dim)
+                )
 
             if self.unit != Scalar and self.scale != other.scale:
                 raise ValueError("Can't compare values: incompatible scales")
@@ -87,7 +96,10 @@ class Value:
     def __le__(self, other: Any) -> bool:
         if isinstance(other, Value):
             if self.unit != other.unit:
-                raise ValueError("Can't compare values: incompatible mass dimensions {} and {}".format(self.unit.mass_dim, other.unit.mass_dim))
+                raise ValueError(
+                    "Can't compare values: incompatible mass dimensions {} and {}"
+                    .format(self.unit.mass_dim, other.unit.mass_dim)
+                )
 
             if self.unit != Scalar and self.scale != other.scale:
                 raise ValueError("Can't compare values: incompatible scales")
@@ -102,7 +114,10 @@ class Value:
     def __gt__(self, other: Any) -> bool:
         if isinstance(other, Value):
             if self.unit != other.unit:
-                raise ValueError("Can't compare values: incompatible mass dimensions {} and {}".format(self.unit.mass_dim, other.unit.mass_dim))
+                raise ValueError(
+                    "Can't compare values: incompatible mass dimensions {} and {}"
+                    .format(self.unit.mass_dim, other.unit.mass_dim)
+                )
 
             if self.unit != Scalar and self.scale != other.scale:
                 raise ValueError("Can't compare values: incompatible scales")
@@ -117,7 +132,10 @@ class Value:
     def __ge__(self, other: Any) -> bool:
         if isinstance(other, Value):
             if self.unit != other.unit:
-                raise ValueError("Can't compare values: incompatible mass dimensions {} and {}".format(self.unit.mass_dim, other.unit.mass_dim))
+                raise ValueError(
+                    "Can't compare values: incompatible mass dimensions {} and {}"
+                    .format(self.unit.mass_dim, other.unit.mass_dim)
+                )
 
             if self.unit != Scalar and self.scale != other.scale:
                 raise ValueError("Can't compare values: incompatible scales")
@@ -139,7 +157,10 @@ class Value:
     def __add__(self, other: Any) -> "Value":
         if isinstance(other, Value):
             if self.unit != other.unit:
-                raise ValueError("Can't add values: incompatible mass dimensions {} and {}".format(self.unit.mass_dim, other.unit.mass_dim))
+                raise ValueError(
+                    "Can't add values: incompatible mass dimensions {} and {}"
+                    .format(self.unit.mass_dim, other.unit.mass_dim)
+                )
 
             if self.unit != Scalar and self.scale != other.scale:
                 raise ValueError("Can't add values: incompatible scales")
@@ -172,7 +193,10 @@ class Value:
     def __sub__(self, other: Any) -> "Value":
         if isinstance(other, Value):
             if self.unit != other.unit:
-                raise ValueError("Can't subtract values: incompatible mass dimensions {} and {}".format(self.unit.mass_dim, other.unit.mass_dim))
+                raise ValueError(
+                    "Can't subtract values: incompatible mass dimensions {} and {}"
+                    .format(self.unit.mass_dim, other.unit.mass_dim)
+                )
 
             if self.unit != Scalar and self.scale != other.scale:
                 raise ValueError("Can't subtract values: incompatible scales")
