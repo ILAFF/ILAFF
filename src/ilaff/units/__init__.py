@@ -15,6 +15,8 @@ Examples:
     '0.0046 fm^2'
     >>> import numpy
     >>> latt = Lattice()
+    >>> str(0.068 / a(latt))
+    '0.068 a^-1'
     >>> numpy.array(range(0, 2)) * a(latt)
     Value(value=array([0., 1.]), unit=Unit(mass_dim=-1), scale=Lattice())
 
@@ -77,15 +79,17 @@ Examples:
     '0.28700000000000003 GeV'
     >>> str(m - o)
     '-0.016999999999999987 GeV'
-    >>> str(m * o)
-    '0.02052 GeV^2'
-    >>> str(m / o)
-    '0.8881578947368421'
+    >>> str(m * o + n**2)
+    '0.038745 GeV^2'
+    >>> str(m / o + 2.0)
+    '2.888157894736842'
+    >>> str(1.0 / n)
+    '1.4616813244444444 fm'
     >>> m == o
     False
     >>> m != o
     True
-    >>> m == n
+    >>> m**2 == n * n
     True
     >>> o > m
     True
