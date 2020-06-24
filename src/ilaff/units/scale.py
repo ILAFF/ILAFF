@@ -1,5 +1,5 @@
-from dataclasses import dataclass, field
-from typing import Tuple, Optional, MutableMapping
+from dataclasses import dataclass
+from typing import Tuple
 
 from .unit import Unit, Mass, Length, Scalar
 from .value import Scale, Value
