@@ -32,6 +32,7 @@ setup(
         "dataclasses;python_version<'3.7'",
         "numpy>=1.13",
     ],
+    extras_require={"dev": ["sphinx", "sphinx_rtd_theme"],},
     project_urls={
         "Bug Reports": "https://github.com/ILAFF/ILAFF/issues",
         "Source": "https://github.com/ILAFF/ILAFF/",
