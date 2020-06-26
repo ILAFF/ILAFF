@@ -2,56 +2,56 @@ import abc
 from dataclasses import dataclass
 from typing import Any, Tuple
 
-from .unit import Unit, Scalar
+from .dimension import Dimension, Scalar
 
 
 class Scale(abc.ABC):
     @abc.abstractmethod
-    def unit(self, unit: Unit) -> Tuple["Value", str]: ...
+    def unit(self, dimension: Dimension) -> Tuple["Quantity", str]: ...
 
 
 @dataclass(frozen=True, eq=False, order=False)
-class Value:
+class Quantity:
     value: Any
-    unit: Unit
+    dimension: Dimension
     scale: Scale
 
-    def set_scale(self, curr: "Value", new: "Value") -> "Value":
+    def set_scale(self, curr: "Quantity", new: "Quantity") -> "Quantity":
         if self.scale != curr.scale:
             raise ValueError("Error setting scale: Can't set scale for {} with {}".format(self, curr))
-        if curr.unit != new.unit:
+        if curr.dimension != new.dimension:
             raise ValueError("Error setting scale: {} and {} have different mass dimensions".format(curr, new))
         if curr.scale == new.scale:
             raise ValueError("Error setting scale: Initial and final scale are the same")
-        return Value(
-            self.value * self.unit.scale(
-                (new.value / curr.value)**(1 / curr.unit.mass_dim)
+        return Quantity(
+            self.value * self.dimension.scale(
+                (new.value / curr.value)**(1 / curr.dimension.mass_dim)
             ),
-            self.unit,
+            self.dimension,
             new.scale,
         )
 
-    def in_unit(self, val: "Value") -> Any:
+    def in_unit(self, val: "Quantity") -> Any:
         try:
             res = self / val
         except ValueError:
             raise ValueError("Can't convert units: incompatible scales")
-        if res.unit.mass_dim != 0:
+        if res.dimension.mass_dim != 0:
             raise ValueError(
                 "Can't convert units: incompatible mass dimensions {} and {}"
-                .format(self.unit.mass_dim, val.unit.mass_dim)
+                .format(self.dimension.mass_dim, val.dimension.mass_dim)
             )
         return res.value
 
     def __str__(self) -> str:
-        unit, suffix = self.scale.unit(self.unit)
+        unit, suffix = self.scale.unit(self.dimension)
         if suffix != "":
             return str(self.in_unit(unit)) + " " + suffix
         else:
             return str(self.in_unit(unit))
 
     def __format__(self, format_str: str) -> str:
-        unit, suffix = self.scale.unit(self.unit)
+        unit, suffix = self.scale.unit(self.dimension)
         if suffix != "":
             return ("{:" + format_str + "} {}").format(
                 self.in_unit(unit),
@@ -63,249 +63,249 @@ class Value:
             )
 
     def __eq__(self, other: Any) -> Any:
-        if isinstance(other, Value):
-            if self.unit != other.unit:
+        if isinstance(other, Quantity):
+            if self.dimension != other.dimension:
                 raise ValueError(
                     "Can't compare values: incompatible mass dimensions {} and {}"
-                    .format(self.unit.mass_dim, other.unit.mass_dim)
+                    .format(self.dimension.mass_dim, other.dimension.mass_dim)
                 )
 
-            if self.unit != Scalar and self.scale != other.scale:
+            if self.dimension != Scalar and self.scale != other.scale:
                 raise ValueError("Can't compare values: incompatible scales")
 
             return self.value == other.value
         else:
-            if self.unit != Scalar:
-                raise ValueError("Can't compare scalar to mass dimension {}".format(self.unit.mass_dim))
+            if self.dimension != Scalar:
+                raise ValueError("Can't compare scalar to mass dimension {}".format(self.dimension.mass_dim))
 
             return self.value == other
 
     def __lt__(self, other: Any) -> Any:
-        if isinstance(other, Value):
-            if self.unit != other.unit:
+        if isinstance(other, Quantity):
+            if self.dimension != other.dimension:
                 raise ValueError(
                     "Can't compare values: incompatible mass dimensions {} and {}"
-                    .format(self.unit.mass_dim, other.unit.mass_dim)
+                    .format(self.dimension.mass_dim, other.dimension.mass_dim)
                 )
 
-            if self.unit != Scalar and self.scale != other.scale:
+            if self.dimension != Scalar and self.scale != other.scale:
                 raise ValueError("Can't compare values: incompatible scales")
 
             return self.value < other.value
         else:
-            if self.unit != Scalar:
-                raise ValueError("Can't compare scalar to mass dimension {}".format(self.unit.mass_dim))
+            if self.dimension != Scalar:
+                raise ValueError("Can't compare scalar to mass dimension {}".format(self.dimension.mass_dim))
 
             return self.value < other
 
     def __le__(self, other: Any) -> Any:
-        if isinstance(other, Value):
-            if self.unit != other.unit:
+        if isinstance(other, Quantity):
+            if self.dimension != other.dimension:
                 raise ValueError(
                     "Can't compare values: incompatible mass dimensions {} and {}"
-                    .format(self.unit.mass_dim, other.unit.mass_dim)
+                    .format(self.dimension.mass_dim, other.dimension.mass_dim)
                 )
 
-            if self.unit != Scalar and self.scale != other.scale:
+            if self.dimension != Scalar and self.scale != other.scale:
                 raise ValueError("Can't compare values: incompatible scales")
 
             return self.value <= other.value
         else:
-            if self.unit != Scalar:
-                raise ValueError("Can't compare scalar to mass dimension {}".format(self.unit.mass_dim))
+            if self.dimension != Scalar:
+                raise ValueError("Can't compare scalar to mass dimension {}".format(self.dimension.mass_dim))
 
             return self.value <= other
 
     def __gt__(self, other: Any) -> Any:
-        if isinstance(other, Value):
-            if self.unit != other.unit:
+        if isinstance(other, Quantity):
+            if self.dimension != other.dimension:
                 raise ValueError(
                     "Can't compare values: incompatible mass dimensions {} and {}"
-                    .format(self.unit.mass_dim, other.unit.mass_dim)
+                    .format(self.dimension.mass_dim, other.dimension.mass_dim)
                 )
 
-            if self.unit != Scalar and self.scale != other.scale:
+            if self.dimension != Scalar and self.scale != other.scale:
                 raise ValueError("Can't compare values: incompatible scales")
 
             return self.value > other.value
         else:
-            if self.unit != Scalar:
-                raise ValueError("Can't compare scalar to mass dimension {}".format(self.unit.mass_dim))
+            if self.dimension != Scalar:
+                raise ValueError("Can't compare scalar to mass dimension {}".format(self.dimension.mass_dim))
 
             return self.value > other
 
     def __ge__(self, other: Any) -> Any:
-        if isinstance(other, Value):
-            if self.unit != other.unit:
+        if isinstance(other, Quantity):
+            if self.dimension != other.dimension:
                 raise ValueError(
                     "Can't compare values: incompatible mass dimensions {} and {}"
-                    .format(self.unit.mass_dim, other.unit.mass_dim)
+                    .format(self.dimension.mass_dim, other.dimension.mass_dim)
                 )
 
-            if self.unit != Scalar and self.scale != other.scale:
+            if self.dimension != Scalar and self.scale != other.scale:
                 raise ValueError("Can't compare values: incompatible scales")
 
             return self.value >= other.value
         else:
-            if self.unit != Scalar:
-                raise ValueError("Can't compare scalar to mass dimension {}".format(self.unit.mass_dim))
+            if self.dimension != Scalar:
+                raise ValueError("Can't compare scalar to mass dimension {}".format(self.dimension.mass_dim))
 
             return self.value >= other
 
-    def __neg__(self) -> "Value":
-        return Value(
+    def __neg__(self) -> "Quantity":
+        return Quantity(
             -self.value,
-            self.unit,
+            self.dimension,
             self.scale,
         )
 
-    def __add__(self, other: Any) -> "Value":
-        if isinstance(other, Value):
-            if self.unit != other.unit:
+    def __add__(self, other: Any) -> "Quantity":
+        if isinstance(other, Quantity):
+            if self.dimension != other.dimension:
                 raise ValueError(
                     "Can't add values: incompatible mass dimensions {} and {}"
-                    .format(self.unit.mass_dim, other.unit.mass_dim)
+                    .format(self.dimension.mass_dim, other.dimension.mass_dim)
                 )
 
-            if self.unit != Scalar and self.scale != other.scale:
+            if self.dimension != Scalar and self.scale != other.scale:
                 raise ValueError("Can't add values: incompatible scales")
 
-            return Value(
+            return Quantity(
                 self.value + other.value,
-                self.unit,
+                self.dimension,
                 self.scale,
             )
         else:
-            if self.unit != Scalar:
-                raise ValueError("Can't add scalar to mass dimension {}".format(self.unit.mass_dim))
+            if self.dimension != Scalar:
+                raise ValueError("Can't add scalar to mass dimension {}".format(self.dimension.mass_dim))
 
-            return Value(
+            return Quantity(
                 self.value + other,
-                self.unit,
+                self.dimension,
                 self.scale,
             )
 
-    def __radd__(self, other: Any) -> "Value":
-        if self.unit != Scalar:
-            raise ValueError("Can't add mass dimension {} to scalar".format(self.unit.mass_dim))
+    def __radd__(self, other: Any) -> "Quantity":
+        if self.dimension != Scalar:
+            raise ValueError("Can't add mass dimension {} to scalar".format(self.dimension.mass_dim))
 
-        return Value(
+        return Quantity(
             other + self.value,
-            self.unit,
+            self.dimension,
             self.scale,
         )
 
-    def __sub__(self, other: Any) -> "Value":
-        if isinstance(other, Value):
-            if self.unit != other.unit:
+    def __sub__(self, other: Any) -> "Quantity":
+        if isinstance(other, Quantity):
+            if self.dimension != other.dimension:
                 raise ValueError(
                     "Can't subtract values: incompatible mass dimensions {} and {}"
-                    .format(self.unit.mass_dim, other.unit.mass_dim)
+                    .format(self.dimension.mass_dim, other.dimension.mass_dim)
                 )
 
-            if self.unit != Scalar and self.scale != other.scale:
+            if self.dimension != Scalar and self.scale != other.scale:
                 raise ValueError("Can't subtract values: incompatible scales")
 
-            return Value(
+            return Quantity(
                 self.value - other.value,
-                self.unit,
+                self.dimension,
                 self.scale,
             )
         else:
-            if self.unit != Scalar:
-                raise ValueError("Can't subtract scalar from mass dimension {}".format(self.unit.mass_dim))
+            if self.dimension != Scalar:
+                raise ValueError("Can't subtract scalar from mass dimension {}".format(self.dimension.mass_dim))
 
-            return Value(
+            return Quantity(
                 self.value - other,
-                self.unit,
+                self.dimension,
                 self.scale,
             )
 
-    def __rsub__(self, other: Any) -> "Value":
-        if self.unit != Scalar:
-            raise ValueError("Can't subtract mass dimension {} from scalar".format(self.unit.mass_dim))
+    def __rsub__(self, other: Any) -> "Quantity":
+        if self.dimension != Scalar:
+            raise ValueError("Can't subtract mass dimension {} from scalar".format(self.dimension.mass_dim))
 
-        return Value(
+        return Quantity(
             other - self.value,
-            self.unit,
+            self.dimension,
             self.scale,
         )
 
-    def __mul__(self, other: Any) -> "Value":
-        if isinstance(other, Value):
-            if other.unit == Scalar:
+    def __mul__(self, other: Any) -> "Quantity":
+        if isinstance(other, Quantity):
+            if other.dimension == Scalar:
                 scale = self.scale
-            elif self.unit == Scalar:
+            elif self.dimension == Scalar:
                 scale = other.scale
             elif self.scale == other.scale:
                 scale = self.scale
             else:
                 raise ValueError("Can't multiply values: incompatible scales")
 
-            return Value(
+            return Quantity(
                 self.value * other.value,
-                self.unit * other.unit,
+                self.dimension * other.dimension,
                 scale,
             )
         else:
-            return Value(
+            return Quantity(
                 self.value * other,
-                self.unit,
+                self.dimension,
                 self.scale,
             )
 
-    def __rmul__(self, other: Any) -> "Value":
-        return Value(
+    def __rmul__(self, other: Any) -> "Quantity":
+        return Quantity(
             other * self.value,
-            self.unit,
+            self.dimension,
             self.scale,
         )
 
-    def __truediv__(self, other: Any) -> "Value":
-        if isinstance(other, Value):
-            if other.unit == Scalar:
+    def __truediv__(self, other: Any) -> "Quantity":
+        if isinstance(other, Quantity):
+            if other.dimension == Scalar:
                 scale = self.scale
-            elif self.unit == Scalar:
+            elif self.dimension == Scalar:
                 scale = other.scale
             elif self.scale == other.scale:
                 scale = self.scale
             else:
                 raise ValueError("Can't divide values: incompatible scales")
 
-            return Value(
+            return Quantity(
                 self.value / other.value,
-                self.unit / other.unit,
+                self.dimension / other.dimension,
                 scale,
             )
         else:
-            return Value(
+            return Quantity(
                 self.value / other,
-                self.unit,
+                self.dimension,
                 self.scale,
             )
 
-    def __rtruediv__(self, other: Any) -> "Value":
-        return Value(
+    def __rtruediv__(self, other: Any) -> "Quantity":
+        return Quantity(
             other / self.value,
-            Scalar / self.unit,
+            Scalar / self.dimension,
             self.scale,
         )
 
-    def __pow__(self, other: int) -> "Value":
-        return Value(
+    def __pow__(self, other: int) -> "Quantity":
+        return Quantity(
             self.value**other,
-            self.unit**other,
+            self.dimension**other,
             self.scale,
         )
 
-    def root(self, other: int) -> "Value":
-        return Value(
+    def root(self, other: int) -> "Quantity":
+        return Quantity(
             self.value**(1 / other),
-            self.unit.root(other),
+            self.dimension.root(other),
             self.scale,
         )
 
-    def sqrt(self) -> "Value":
+    def sqrt(self) -> "Quantity":
         return self.root(2)
 
     __array_ufunc__ = None
