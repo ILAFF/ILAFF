@@ -6,8 +6,8 @@ def test_mismatched() -> None:
     latt = units.Lattice()
     latt2 = units.Lattice()
 
-    a = units.Value(1.0, units.Length, latt)
-    a2 = units.Value(1.0, units.Length, latt2)
+    a = units.Quantity(1.0, units.Length, latt)
+    a2 = units.Quantity(1.0, units.Length, latt2)
 
     with pytest.raises(ValueError):
         a + a2
@@ -23,8 +23,8 @@ def test_convert() -> None:
     latt = units.Lattice()
     latt2 = units.Lattice()
 
-    a = units.Value(1.0, units.Length, latt)
-    a2 = units.Value(1.0, units.Length, latt2)
+    a = units.Quantity(1.0, units.Length, latt)
+    a2 = units.Quantity(1.0, units.Length, latt2)
 
     a_phys = a.set_scale(a, 0.0904 * units.fm)
     with pytest.raises(ValueError):
@@ -59,7 +59,7 @@ def test_format() -> None:
     assert str(units.Scalar) == "scalar"
 
     with pytest.raises(TypeError):
-        units.Value(
+        units.Quantity(
             0.0,
             units.Length,
             units.Scale()  # type: ignore
@@ -89,7 +89,7 @@ def test_format() -> None:
 
 
 def test_roots() -> None:
-    assert units.unit.Unit(-4).sqrt() == units.unit.Unit(-2)
+    assert units.Dimension(-4).sqrt() == units.Dimension(-2)
 
     latt = units.Lattice()
     t_current = (21 - 16) * units.a(latt)

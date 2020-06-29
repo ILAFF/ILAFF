@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class Unit:
+class Dimension:
     mass_dim: int
 
     def __str__(self) -> str:
@@ -16,31 +16,31 @@ class Unit:
             return "length^{}".format(-self.mass_dim)
         return "scalar"
 
-    def __mul__(self, other: "Unit") -> "Unit":
-        return Unit(self.mass_dim + other.mass_dim)
+    def __mul__(self, other: "Dimension") -> "Dimension":
+        return Dimension(self.mass_dim + other.mass_dim)
 
-    def __truediv__(self, other: "Unit") -> "Unit":
-        return Unit(self.mass_dim - other.mass_dim)
+    def __truediv__(self, other: "Dimension") -> "Dimension":
+        return Dimension(self.mass_dim - other.mass_dim)
 
-    def __pow__(self, exponent: int) -> "Unit":
-        return Unit(self.mass_dim * exponent)
+    def __pow__(self, exponent: int) -> "Dimension":
+        return Dimension(self.mass_dim * exponent)
 
-    def root(self, exponent: int) -> "Unit":
+    def root(self, exponent: int) -> "Dimension":
         if self.mass_dim % exponent != 0:
             if exponent == 2:
                 raise ValueError("Can't take square root of {}".format(self))
             if exponent == 3:
                 raise ValueError("Can't take cube root of {}".format(self))
             raise ValueError("Can't take {}-th root of {}".format(exponent, self))
-        return Unit(self.mass_dim // exponent)
+        return Dimension(self.mass_dim // exponent)
 
-    def sqrt(self) -> "Unit":
+    def sqrt(self) -> "Dimension":
         return self.root(2)
 
     def scale(self, scale: float) -> float:
         return scale**self.mass_dim
 
 
-Scalar = Unit(0)
-Mass = Unit(1)
-Length = Unit(-1)
+Scalar = Dimension(0)
+Mass = Dimension(1)
+Length = Dimension(-1)

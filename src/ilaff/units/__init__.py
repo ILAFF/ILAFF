@@ -1,12 +1,12 @@
 """Dimensional analysis for use in lattice QCD analyses.
 
-A seperate instance of Lattice should be constructed for each independent
+A separate instance of ``Lattice`` should be constructed for each independent
 lattice spacing. This ensures that the independent lattice spacings are kept
 distinct.
 
-New values should generally be constructed by multiplying a float, numpy array,
-or other raw value by one of the provided unit values (e.g. units.MeV,
-units.GeV, units.fm, or units.a(scale)).
+New quantities should generally be constructed by multiplying a float, numpy
+array, or other raw value by one of the provided units (i.e. ``units.MeV``, 
+``units.GeV``, ``units.fm``, or ``units.a(scale)``).
 
 Examples:
     >>> str(135.0 * MeV)
@@ -18,7 +18,7 @@ Examples:
     >>> str(0.068 / a(latt))
     '0.068 a^-1'
     >>> numpy.array(range(0, 2)) * a(latt)
-    Value(value=array([0., 1.]), unit=Unit(mass_dim=-1), scale=Lattice())
+    Quantity(value=array([0., 1.]), dimension=Dimension(mass_dim=-1), scale=Lattice())
 
 
 To load values in lattice units directly into physical units based on a known
@@ -34,17 +34,17 @@ Examples:
     ...     n = tmpfile.write(b'0.49 0.48 0.50')
     ...     tmpfile.flush()
     ...     numpy.loadtxt(tmpfile.name) / a1
-    Value(value=array([0.9669022 , 0.9471695 , 0.98663489]), unit=Unit(mass_dim=1), scale=Physical())
+    Quantity(value=array([0.9669022 , 0.9471695 , 0.98663489]), dimension=Dimension(mass_dim=1), scale=Physical())
 
 
-It is also possible to use the Value constructor directly to initialise
-values from their mass dimension, but this is not recommended for physical
-units as it relies on the internal representation of the units. However, it
-works as expected for lattice units.
+It is also possible to use the ``Quantity`` constructor directly to initialise
+quantities from their mass dimension, but this is not recommended for physical
+units as it relies on the internal representation of the units in ``Quantity``.
+However, it works as expected for lattice units.
 
 Example:
     >>> latt = Lattice()
-    >>> str(Value(
+    >>> str(Quantity(
     ...     16.0,
     ...     Length,
     ...     latt,
@@ -52,7 +52,7 @@ Example:
     '16.0 a'
 
 
-Values can be negated, raised to integer powers or rooted.
+Quantities can be negated, raised to integer powers or rooted.
 
 Examples:
     >>> m2 = 0.0182 * GeV**2
@@ -68,8 +68,8 @@ Examples:
     '0.13490737563232044 GeV'
 
 
-Values with compatible scales can be added, subtracted, multiplied, divided,
-and compared.
+Quantities with compatible scales and dimensions can be added, subtracted,
+multiplied, divided, and compared.
 
 Examples:
     >>> m = 0.135 * GeV
@@ -95,10 +95,10 @@ Examples:
     True
 
 
-In order to perform these operations, values must be converted to the same
-scale using v.set_scale(pre_value, post_value), where pre_value is some value
-in v's current scale, and post_value is the corresponding value in the target
-scale.
+In order to perform these operations, quantities must be converted to the same
+scale using ``q.set_scale(current, target)``, where ``current`` is some
+quantity in ``q``'s current scale, and ``target`` is the corresponding quantity
+in the target scale.
 
 Examples:
     >>> latt = Lattice()
@@ -112,7 +112,7 @@ Examples:
     '0.33232697880000006 GeV'
 
 
-Values can be extracted in specific units using the in_unit method.
+Values can be extracted in specific units using the ``in_unit`` method.
 
 Example:
     >>> m = 135.0 * MeV
@@ -125,11 +125,11 @@ Example:
 """
 
 from .scale import Physical, Lattice, MeV, GeV, fm, a, one
-from .unit import Unit, Mass, Length, Scalar
-from .value import Value, Scale
+from .dimension import Dimension, Mass, Length, Scalar
+from .quantity import Quantity, Scale
 
 __all__ = [
     'Physical', 'Lattice', 'MeV', 'GeV', 'fm', 'a', 'one',
-    'Unit', 'Mass', 'Length', 'Scalar',
-    'Value', 'Scale',
+    'Dimension', 'Mass', 'Length', 'Scalar',
+    'Quantity', 'Scale',
 ]
