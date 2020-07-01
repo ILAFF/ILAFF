@@ -17,7 +17,7 @@ Examples:
     >>> latt = Lattice()
     >>> str(0.068 / a(latt))
     '0.068 a^-1'
-    >>> numpy.array(range(0, 2)) * a(latt)
+    >>> numpy.arange(0, 2) * a(latt)
     Quantity(value=array([0., 1.]), dimension=Dimension(mass_dim=-1), scale=Lattice())
 
 
@@ -122,6 +122,24 @@ Example:
     ValueError: Can't convert units: incompatible mass dimensions 1 and -1
     >>> m.in_unit(fm**-1)
     0.6841436524340078
+
+Quantities built from arrays can be indexed or iterated.
+
+Examples:
+    >>> import numpy
+    >>> a = numpy.arange(0, 5) * fm
+    >>> str(a[2])
+    '2.0 fm'
+    >>> str(a[3:5])
+    '[3. 4.] fm'
+    >>> str(a[a < 2 * fm])
+    '[0. 1.] fm'
+    >>> [str(e) for e in a]
+    ['0.0 fm', '1.0 fm', '2.0 fm', '3.0 fm', '4.0 fm']
+    >>> ["{:0.2f}".format(e / (i + 1)) for i, e in enumerate(a)]
+    ['0.00 fm', '0.50 fm', '0.67 fm', '0.75 fm', '0.80 fm']
+    >>> [str(e) for e in reversed(a)]
+    ['4.0 fm', '3.0 fm', '2.0 fm', '1.0 fm', '0.0 fm']
 """
 
 from .scale import Physical, Lattice, MeV, GeV, fm, a, one

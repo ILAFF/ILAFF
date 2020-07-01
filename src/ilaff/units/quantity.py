@@ -1,6 +1,6 @@
 import abc
 from dataclasses import dataclass
-from typing import Any, Tuple
+from typing import Any, Tuple, Iterator
 
 from .dimension import Dimension, Scalar
 
@@ -60,6 +60,32 @@ class Quantity:
         else:
             return ("{:" + format_str + "}").format(
                 self.in_unit(unit),
+            )
+
+    def __len__(self) -> int:
+        return len(self.value)
+
+    def __getitem__(self, key: Any) -> "Quantity":
+        return Quantity(
+            self.value[key],
+            self.dimension,
+            self.scale,
+        )
+
+    def __iter__(self) -> "Iterator[Quantity]":
+        for value in iter(self.value):
+            yield Quantity(
+                value,
+                self.dimension,
+                self.scale,
+            )
+
+    def __reversed__(self) -> "Iterator[Quantity]":
+        for value in reversed(self.value):
+            yield Quantity(
+                value,
+                self.dimension,
+                self.scale,
             )
 
     def __eq__(self, other: Any) -> Any:
