@@ -2,13 +2,12 @@ from ilaff.units.quantity import Quantity
 from ilaff.measurements.measurementJack import measurementJack
 
 
-import numpy as np
+import numpy as np #type:ignore
 
 def effE( G: Quantity, deltaT: int, a: Quantity) -> Quantity:
     """
     Effective Mass Function
     """
-
     return ( (1.0/(deltaT*a) ) * np.log( G.value/np.roll(G.value,deltaT) ) )
 
 def effEMJ( GMJ: measurementJack, deltaT: int, a: Quantity) -> measurementJack:

@@ -55,13 +55,16 @@ class measurementJack:
 
 
     #=,>,<,>=,<= comparators
-    def __eq__(self, other: "measurementJack") -> Any:
-        equal = False
-        if (self.iValue == other.iValue).all():
-            if (self.dValue == other.dValue).all():
-                print('TODO: TEST JACKKNIFES')
-                equal = True
-        return equal
+    def __eq__(self, other: Any) -> Any:
+        if isinstance(other, measurementJack):            
+            equal = False
+            if (self.iValue == other.iValue).all():
+                if (self.dValue == other.dValue).all():
+                    print('TODO: TEST JACKKNIFES')
+                    equal = True
+            return equal
+        else:
+            return False
     def __lt__(self, other: "measurementJack") -> Any:
         equal = False
         if (self.iValue == other.iValue).all():
@@ -97,7 +100,7 @@ class measurementJack:
             -self.dValue,
             -self.jackDV
         )
-    def __add__(self, other: "measurementJack") -> "measurementJack":
+    def __add__(self, other: Any) -> "measurementJack":
         if isinstance(other, measurementJack):
             if not (self.iValue == other.iValue).all():
                 print('TODO: Format the printing of two iValues')
