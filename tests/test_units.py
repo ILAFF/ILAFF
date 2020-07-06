@@ -326,3 +326,44 @@ def test_arithmetic() -> None:
     ).in_unit(
         units.fm**-1
     ) == pytest.approx(6.86 / (5 * 0.0913))
+
+
+def test_numpy() -> None:
+    import numpy  # type: ignore
+
+    t = numpy.arange(1, 9) * units.fm
+    m_eff = numpy.array([1.2, 1.1, 0.9, 0.9, 0.8, 0.9, 0.9, 0.8]) * units.GeV
+
+    assert len(m_eff) == len(t)
+    assert len(t) == 8
+
+    assert m_eff[1] == 1.1 * units.GeV
+    assert m_eff[5] == 0.9 * units.GeV
+
+    assert numpy.all(m_eff[2:5] == numpy.array([0.9, 0.9, 0.8]) * units.GeV)
+
+    assert numpy.all(t[m_eff < 0.85 * units.GeV] == numpy.array([5.0, 8.0]) * units.fm)
+
+    it = iter(t)
+    assert next(it) == 1.0 * units.fm
+    assert next(it) == 2.0 * units.fm
+    assert next(it) == 3.0 * units.fm
+    assert next(it) == 4.0 * units.fm
+    assert next(it) == 5.0 * units.fm
+    assert next(it) == 6.0 * units.fm
+    assert next(it) == 7.0 * units.fm
+    assert next(it) == 8.0 * units.fm
+    with pytest.raises(StopIteration):
+        next(it)
+
+    it = reversed(m_eff)
+    assert next(it) == 0.8 * units.GeV
+    assert next(it) == 0.9 * units.GeV
+    assert next(it) == 0.9 * units.GeV
+    assert next(it) == 0.8 * units.GeV
+    assert next(it) == 0.9 * units.GeV
+    assert next(it) == 0.9 * units.GeV
+    assert next(it) == 1.1 * units.GeV
+    assert next(it) == 1.2 * units.GeV
+    with pytest.raises(StopIteration):
+        next(it)
