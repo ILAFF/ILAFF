@@ -11,7 +11,7 @@ Welcome to ILAFF's documentation!
    :caption: Contents:
 
    ilaff.units
-
+   ilaff.measurements
 
 
 Indices and tables
