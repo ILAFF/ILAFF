@@ -1,6 +1,7 @@
 import abc
 from collections import defaultdict
 from dataclasses import dataclass
+from functools import wraps
 import numpy  # type: ignore
 from typing import Any, Tuple, Iterator, Callable, MutableMapping
 
@@ -101,13 +102,21 @@ class _UfuncUnits:
 _ufuncs: MutableMapping[numpy.ufunc, _UfuncUnits] = defaultdict(_UfuncUnits)
 
 
-def _inplace(method: str) -> Callable[["Quantity", Any], Any]:
+def _op(method: Callable[["Quantity", Any], Any]) -> Callable[["Quantity", Any], "Quantity"]:
+    @wraps(method)
+    def fn(self: "Quantity", other: Any) -> "Quantity":
+        result: Quantity = getattr(super(Quantity, self), method.__name__)(other)
+        return result
+    return fn
+
+
+def _iop(method: Callable[["Quantity", Any], Any]) -> Callable[["Quantity", Any], Any]:
+    @wraps(method)
     def fn(self: "Quantity", other: Any) -> Any:
         if isinstance(self.value, numpy.ndarray):
-            return getattr(super(Quantity, self), method)(other)
+            return getattr(super(Quantity, self), method.__name__)(other)
         else:
             return NotImplemented
-    fn.__name__ = method
     return fn
 
 
@@ -254,19 +263,122 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin):
             else:
                 return result
 
-    __iadd__ = _inplace('__iadd__')
-    __isub__ = _inplace('__isub__')
-    __imul__ = _inplace('__imul__')
-    __imatmul__ = _inplace('__imatmul__')
-    __itruediv__ = _inplace('__itruediv__')
-    __ifloordiv__ = _inplace('__ifloordiv__')
-    __imod__ = _inplace('__imod__')
-    __ipow__ = _inplace('__ipow__')
-    __ilshift__ = _inplace('__ilshift__')
-    __irshift__ = _inplace('__irshift__')
-    __iand_ = _inplace('__iand__')
-    __ixor_ = _inplace('__ixor__')
-    __ior_ = _inplace('__ior__')
+    @_op
+    def __add__(self, other: Any) -> "Quantity": ...
+
+    @_op
+    def __sub__(self, other: Any) -> "Quantity": ...
+
+    @_op
+    def __mul__(self, other: Any) -> "Quantity": ...
+
+    @_op
+    def __matmul__(self, other: Any) -> "Quantity": ...
+
+    @_op
+    def __truediv__(self, other: Any) -> "Quantity": ...
+
+    @_op
+    def __floordiv__(self, other: Any) -> "Quantity": ...
+
+    @_op
+    def __mod__(self, other: Any) -> "Quantity": ...
+
+    @_op
+    def __pow__(self, other: Any) -> "Quantity": ...
+
+    @_op
+    def __lshift__(self, other: Any) -> "Quantity": ...
+
+    @_op
+    def __rshift__(self, other: Any) -> "Quantity": ...
+
+    @_op
+    def __and__(self, other: Any) -> "Quantity": ...
+
+    @_op
+    def __xor__(self, other: Any) -> "Quantity": ...
+
+    @_op
+    def __or__(self, other: Any) -> "Quantity": ...
+
+    @_op
+    def __radd__(self, other: Any) -> "Quantity": ...
+
+    @_op
+    def __rsub__(self, other: Any) -> "Quantity": ...
+
+    @_op
+    def __rmul__(self, other: Any) -> "Quantity": ...
+
+    @_op
+    def __rmatmul__(self, other: Any) -> "Quantity": ...
+
+    @_op
+    def __rtruediv__(self, other: Any) -> "Quantity": ...
+
+    @_op
+    def __rfloordiv__(self, other: Any) -> "Quantity": ...
+
+    @_op
+    def __rmod__(self, other: Any) -> "Quantity": ...
+
+    @_op
+    def __rpow__(self, other: Any) -> "Quantity": ...
+
+    @_op
+    def __rlshift__(self, other: Any) -> "Quantity": ...
+
+    @_op
+    def __rrshift__(self, other: Any) -> "Quantity": ...
+
+    @_op
+    def __rand__(self, other: Any) -> "Quantity": ...
+
+    @_op
+    def __rxor__(self, other: Any) -> "Quantity": ...
+
+    @_op
+    def __ror__(self, other: Any) -> "Quantity": ...
+
+    @_iop
+    def __iadd__(self, other: Any) -> Any: ...
+
+    @_iop
+    def __isub__(self, other: Any) -> Any: ...
+
+    @_iop
+    def __imul__(self, other: Any) -> Any: ...
+
+    @_iop
+    def __imatmul__(self, other: Any) -> Any: ...
+
+    @_iop
+    def __itruediv__(self, other: Any) -> Any: ...
+
+    @_iop
+    def __ifloordiv__(self, other: Any) -> Any: ...
+
+    @_iop
+    def __imod__(self, other: Any) -> Any: ...
+
+    @_iop
+    def __ipow__(self, other: Any) -> Any: ...
+
+    @_iop
+    def __ilshift__(self, other: Any) -> Any: ...
+
+    @_iop
+    def __irshift__(self, other: Any) -> Any: ...
+
+    @_iop
+    def __iand__(self, other: Any) -> Any: ...
+
+    @_iop
+    def __ixor__(self, other: Any) -> Any: ...
+
+    @_iop
+    def __ior__(self, other: Any) -> Any: ...
 
 
 _ufuncs[numpy.add] = _UfuncUnits(unit_map=_match_units)
