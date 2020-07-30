@@ -10,11 +10,11 @@ Examples:
     >>> import numpy as np
     >>> latt = units.Lattice()
     >>> a = units.a(latt)
-    >>> t = np.arange(1,64) * units.a(latt)
-    >>> G = np.exp( -0.5*t) * units.a(latt)
-    >>> jackG = np.random.random_sample( [64,200] ) * units.a(latt)
+    >>> t = np.arange(1,64) 
+    >>> G = np.exp( -0.5*t) * a
+    >>> jackG = np.random.random_sample( [64,200] ) * a
     >>> 
-    >>> GMeas = meas.measurementJack( t, G, jackG )
+    >>> GMeas = meas.measurementJack( t * a, G, jackG )
 
 measurementJack's  with compatible scales and dimensions can be added, subtracted,
 multiplied, divided, and compared. They must also have equal independent variables.
