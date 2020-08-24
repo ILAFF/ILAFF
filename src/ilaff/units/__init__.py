@@ -107,7 +107,7 @@ Examples:
     >>> str(m + n)
     Traceback (most recent call last):
         ...
-    ValueError: Mismatched scale for argument 1 to add
+    ValueError: Mismatched scale for second argument of add
     >>> str(m + n.set_scale(a(latt), 0.1 * fm))
     '0.33232697880000006 GeV'
 
