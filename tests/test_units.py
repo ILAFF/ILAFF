@@ -1,5 +1,5 @@
 from ilaff import units
-import pytest  # type: ignore
+import pytest
 
 
 def test_mismatched() -> None:
