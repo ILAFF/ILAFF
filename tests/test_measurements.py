@@ -3,7 +3,7 @@ from ilaff import measurements, units
 
 import numpy as np  # type: ignore
 
-import pytest  # type: ignore
+import pytest
 
 
 def test_mismatched() -> None:
