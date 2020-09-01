@@ -40,3 +40,4 @@ Examples:
 
 
 from .measurementJack import measurementJack
+from .measurementObj import measurement

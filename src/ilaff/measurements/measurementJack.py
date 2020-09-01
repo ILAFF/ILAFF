@@ -5,6 +5,7 @@ from typing import Any
 
 import numpy as np # type: ignore
 
+import resample as res # type: ignore
 
 @dataclass(frozen=True, eq=False, order=False)
 class measurementJack:
@@ -41,6 +42,9 @@ class measurementJack:
         return Quantity( jerr, self.jackDV[1].dimension, self.jackDV[1].scale )
         """
 
+
+        """
+        #THIS WORKS - swapping to resample
         tempJack = np.flipud( np.rot90(self.jackDV.value) )
 
         jerr = np.empty( [ len(self.iValue) ] )
@@ -50,6 +54,8 @@ class measurementJack:
             err = np.sqrt( ( np.sum( ( tempJack[tt] - avg )**2.0 ) ) * ( float(len(tempJack[tt])-1)/float(len(tempJack[tt])) ) )
             jerr[tt] = err
         return Quantity( jerr, self.jackDV[1].dimension, self.jackDV[1].scale )        
+        """
+
 
 
 
