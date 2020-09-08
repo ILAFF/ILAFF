@@ -1801,6 +1801,96 @@ def multi_dot(arrays: Sequence[Quantity], *, out: Optional[Quantity] = None) -> 
     return _multiply_units(numpy.linalg.multi_dot, *arrays, argument="array")
 
 
+@_array_func(numpy.fft.fftshift)
+def fftshift(x: Quantity, axes: Optional[Union[int, Sequence[int]]] = None) -> Tuple[Dimension, Scale]:
+    return x.dimension, x.scale
+
+
+@_array_func(numpy.fft.ifftshift)
+def ifftshift(x: Quantity, axes: Optional[Union[int, Sequence[int]]] = None) -> Tuple[Dimension, Scale]:
+    return x.dimension, x.scale
+
+
+@_array_func(numpy.fft.fft)
+def fft(a: Quantity, n: Optional[int] = None, axis: int = -1, norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+    return a.dimension, a.scale
+
+
+@_array_func(numpy.fft.ifft)
+def ifft(a: Quantity, n: Optional[int] = None, axis: int = -1, norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+    return a.dimension, a.scale
+
+
+@_array_func(numpy.fft.rfft)
+def rfft(a: Quantity, n: Optional[int] = None, axis: int = -1, norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+    return a.dimension, a.scale
+
+
+@_array_func(numpy.fft.irfft)
+def irfft(a: Quantity, n: Optional[int] = None, axis: int = -1, norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+    return a.dimension, a.scale
+
+
+@_array_func(numpy.fft.hfft)
+def hfft(a: Quantity, n: Optional[int] = None, axis: int = -1, norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+    return a.dimension, a.scale
+
+
+@_array_func(numpy.fft.ihfft)
+def ihfft(a: Quantity, n: Optional[int] = None, axis: int = -1, norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+    return a.dimension, a.scale
+
+
+@_array_func(numpy.fft.fftn)
+def fftn(a: Quantity, s: Optional[Sequence[int]] = None, axes: Optional[Sequence[int]] = None, norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+    return a.dimension, a.scale
+
+
+@_array_func(numpy.fft.ifftn)
+def ifftn(a: Quantity, s: Optional[Sequence[int]] = None, axes: Optional[Sequence[int]] = None, norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+    return a.dimension, a.scale
+
+
+@_array_func(numpy.fft.fft2)
+def fft2(a: Quantity, s: Optional[Sequence[int]] = None, axes: Sequence[int] = (-2, -1), norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+    return a.dimension, a.scale
+
+
+@_array_func(numpy.fft.ifft2)
+def ifft2(a: Quantity, s: Optional[Sequence[int]] = None, axes: Sequence[int] = (-2, -1), norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+    return a.dimension, a.scale
+
+
+@_array_func(numpy.fft.rfftn)
+def rfftn(a: Quantity, s: Optional[Sequence[int]] = None, axes: Optional[Sequence[int]] = None, norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+    return a.dimension, a.scale
+
+
+@_array_func(numpy.fft.irfftn)
+def irfftn(a: Quantity, s: Optional[Sequence[int]] = None, axes: Optional[Sequence[int]] = None, norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+    return a.dimension, a.scale
+
+
+@_array_func(numpy.fft.rfft2)
+def rfft2(a: Quantity, s: Optional[Sequence[int]] = None, axes: Sequence[int] = (-2, -1), norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+    return a.dimension, a.scale
+
+
+@_array_func(numpy.fft.irfft2)
+def irfft2(a: Quantity, s: Optional[Sequence[int]] = None, axes: Sequence[int] = (-2, -1), norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+    return a.dimension, a.scale
+
+
+
+
+
+
+
+
+
+
+
+
 # Special handling for block method due to nested sequences
 # TODO: implement this
 
