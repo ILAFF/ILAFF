@@ -5,7 +5,8 @@ from functools import wraps
 import inspect
 from itertools import chain
 import numpy  # type: ignore
-from typing import cast, Any, Optional, Tuple, Iterator, Iterable, Sequence, List, Type, Callable, Mapping, MutableMapping, Union, Sized
+from pathlib import Path
+from typing import cast, Any, Optional, Tuple, Iterator, Iterable, Sequence, List, Type, Callable, Mapping, MutableMapping, Union, Sized, TextIO, BinaryIO
 
 from .dimension import Dimension, Scalar
 
@@ -458,7 +459,9 @@ def _array_func(func: Callable) -> Callable[[Callable], Callable]:
     def decorator(unit_map: Callable) -> Callable:
         signature = inspect.signature(unit_map)
         annotation: Mapping[str, Type] = {
-                name: Sequence[param.annotation] if param.kind is param.VAR_POSITIONAL else param.annotation  # type: ignore
+                name: Sequence[param.annotation] if param.kind is param.VAR_POSITIONAL
+                      else Mapping[str, param.annotation] if param.kind is param.VAR_KEYWORD
+                      else param.annotation  # type: ignore
             for name, param in signature.parameters.items()
         }
         def wrapper(args: Iterable[Any], kwargs: Mapping[str, Any]) -> Any:
@@ -471,6 +474,8 @@ def _array_func(func: Callable) -> Callable[[Callable], Callable]:
                         if annotation[name] is Quantity else
                         arg
                         if annotation[name] is Sequence[Quantity] else
+                        arg.keys()
+                        if annotation[name] is Mapping[str, Quantity] else
                         ([] if arg is None else [arg])
                         if annotation[name] is Optional[Quantity] else
                         []
@@ -509,6 +514,13 @@ def _array_func(func: Callable) -> Callable[[Callable], Callable]:
                         (Quantity(a, Scalar, scale), a)
                         for a in arg
                     ))
+                elif ann is Mapping[str, Quantity]:
+                    wrapped_arguments[name], unwrapped_arguments[name] = map(dict, zip(*(
+                        ((key, a), (key, a.value))
+                        if isinstance(a, Quantity) else
+                        ((key, Quantity(a, Scalar, scale)), (key, a))
+                        for key, a in arg.items()
+                    )))
                 else:
                     if isinstance(arg, Quantity):
                         raise TypeError(f"Unexpected Quantity passed to argument '{name}' of {func.__name__}")
@@ -1812,83 +1824,178 @@ def ifftshift(x: Quantity, axes: Optional[Union[int, Sequence[int]]] = None) -> 
 
 
 @_array_func(numpy.fft.fft)
-def fft(a: Quantity, n: Optional[int] = None, axis: int = -1, norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+def fft(a: Quantity, n: Optional[int] = None, axis: int = -1, norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.fft.ifft)
-def ifft(a: Quantity, n: Optional[int] = None, axis: int = -1, norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+def ifft(a: Quantity, n: Optional[int] = None, axis: int = -1, norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.fft.rfft)
-def rfft(a: Quantity, n: Optional[int] = None, axis: int = -1, norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+def rfft(a: Quantity, n: Optional[int] = None, axis: int = -1, norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.fft.irfft)
-def irfft(a: Quantity, n: Optional[int] = None, axis: int = -1, norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+def irfft(a: Quantity, n: Optional[int] = None, axis: int = -1, norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.fft.hfft)
-def hfft(a: Quantity, n: Optional[int] = None, axis: int = -1, norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+def hfft(a: Quantity, n: Optional[int] = None, axis: int = -1, norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.fft.ihfft)
-def ihfft(a: Quantity, n: Optional[int] = None, axis: int = -1, norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+def ihfft(a: Quantity, n: Optional[int] = None, axis: int = -1, norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.fft.fftn)
-def fftn(a: Quantity, s: Optional[Sequence[int]] = None, axes: Optional[Sequence[int]] = None, norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+def fftn(a: Quantity, s: Optional[Sequence[int]] = None, axes: Optional[Sequence[int]] = None, norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.fft.ifftn)
-def ifftn(a: Quantity, s: Optional[Sequence[int]] = None, axes: Optional[Sequence[int]] = None, norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+def ifftn(a: Quantity, s: Optional[Sequence[int]] = None, axes: Optional[Sequence[int]] = None, norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.fft.fft2)
-def fft2(a: Quantity, s: Optional[Sequence[int]] = None, axes: Sequence[int] = (-2, -1), norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+def fft2(a: Quantity, s: Optional[Sequence[int]] = None, axes: Sequence[int] = (-2, -1), norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.fft.ifft2)
-def ifft2(a: Quantity, s: Optional[Sequence[int]] = None, axes: Sequence[int] = (-2, -1), norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+def ifft2(a: Quantity, s: Optional[Sequence[int]] = None, axes: Sequence[int] = (-2, -1), norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.fft.rfftn)
-def rfftn(a: Quantity, s: Optional[Sequence[int]] = None, axes: Optional[Sequence[int]] = None, norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+def rfftn(a: Quantity, s: Optional[Sequence[int]] = None, axes: Optional[Sequence[int]] = None, norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.fft.irfftn)
-def irfftn(a: Quantity, s: Optional[Sequence[int]] = None, axes: Optional[Sequence[int]] = None, norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+def irfftn(a: Quantity, s: Optional[Sequence[int]] = None, axes: Optional[Sequence[int]] = None, norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.fft.rfft2)
-def rfft2(a: Quantity, s: Optional[Sequence[int]] = None, axes: Sequence[int] = (-2, -1), norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+def rfft2(a: Quantity, s: Optional[Sequence[int]] = None, axes: Sequence[int] = (-2, -1), norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.fft.irfft2)
-def irfft2(a: Quantity, s: Optional[Sequence[int]] = None, axes: Sequence[int] = (-2, -1), norm: Option[str] = None) -> Tuple[Dimension, Scale]:
+def irfft2(a: Quantity, s: Optional[Sequence[int]] = None, axes: Sequence[int] = (-2, -1), norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
+@_array_func(numpy.ix_)
+def ix_(*args: Quantity) -> List[Tuple[Dimension, Scale]]:
+    return [(a.dimension, a.scale) for a in args]
 
 
+@_array_func(numpy.fill_diagonal)
+def fill_diagonal(a: Quantity, val: Quantity, wrap: bool = False) -> None:
+    _ = _match_units(numpy.fill_diagonal, a, val)
+    return None
 
 
+@_array_func(numpy.diag_indices_from)
+def diag_indices_from(arr: Quantity) -> None:
+    return None
 
 
+@_array_func(numpy.save)
+def save(file: Union[BinaryIO, str, Path], arr: Quantity, allow_pickle: bool = True, fix_imports: bool = True) -> None:
+    _ = _scalar_units(numpy.save, arr)
+    return None
 
 
+@_array_func(numpy.savez)
+def savez(file: Union[BinaryIO, str, Path], *args: Quantity, **kwds: Quantity) -> None:
+    _ = _scalar_units(numpy.savez, *args, *kwds.values(), labels={len(args) + i: f"'{key}'" for i, key in enumerate(kwds.keys())})
+    return None
+
+
+@_array_func(numpy.savez_compressed)
+def savez_compressed(file: Union[BinaryIO, str, Path], *args: Quantity, **kwds: Quantity) -> None:
+    _ = _scalar_units(numpy.savez_compressed, *args, *kwds.values(), labels={len(args) + i: f"'{key}'" for i, key in enumerate(kwds.keys())})
+    return None
+
+
+@_array_func(numpy.savetxt)
+def savetxt(fname: Union[TextIO, str, Path], X: Quantity, fmt: Union[str, Sequence[str]] = '%.18e', delimiter: str = ' ', newline: str = '\n', header: str = '',
+        footer: str = '', comments: str = '# ', encoding: Optional[str] = None) -> None:
+    _ = _scalar_units(numpy.savetxt, X)
+    return None
+
+
+@_array_func(numpy.poly)
+def poly(seq_of_zeros: Quantity) -> Tuple[Dimension, Scale]:
+    return _scalar_units(numpy.poly, seq_of_zeros)
+
+
+@_array_func(numpy.roots)
+def roots(p: Quantity) -> Tuple[Dimension, Scale]:
+    return Scalar, p.scale
+
+
+@_array_func(numpy.polyint)
+def polyint(p: Quantity, m: int = 1, k: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
+    if k is not None:
+        return _match_units(numpy.polyint, p, k, offset=1)
+    return p.dimension, p.scale
+
+
+@_array_func(numpy.polyder)
+def polyder(p: Quantity, m: int = 1) -> Tuple[Dimension, Scale]:
+    return p.dimension, p.scale
+
+
+@_array_func(numpy.polyfit)
+def polyfit(x: Quantity, y: Quantity, deg: int, rcond: Optional[float] = None,
+            full: bool = False, w: Optional[Quantity] = None, cov: Union[bool, str] = False) -> Tuple[Dimension, Scale]:
+    _ = _scalar_units(numpy.polyfit, x)
+    if w is not None:
+        prod = _mul_units(numpy.polyfit, y, w, labels={1: "w"})
+    else:
+        prod = (y.dimension, y.scale)
+    if full:
+        # TODO: check that singular values should be scalar
+        return [(y.dimension, y.scale), (prod[0]**2, prod[1]), None, (Scalar, y.scale), None]
+    if cov:
+        return [(y.dimension, y.scale), (y.dimension**2, y.scale)]
+    return y.dimension, y.scale
+
+
+@_array_func(numpy.polyval)
+def polyval(p: Quantity, x: Quantity) -> Tuple[Dimension, Scale]:
+    _ = _scalar_units(numpy.polyval, x)
+    return p.dimension, p.scale
+
+
+@_array_func(numpy.polyadd)
+def polyadd(a1: Quantity, a2: Quantity) -> Tuple[Dimension, Scale]:
+    return _match_units(numpy.polyadd, a1, a2)
+
+
+@_array_func(numpy.polysub)
+def polysub(a1: Quantity, a2: Quantity) -> Tuple[Dimension, Scale]:
+    return _match_units(numpy.polysub, a1, a2)
+
+
+@_array_func(numpy.polymul)
+def polymul(a1: Quantity, a2: Quantity) -> Tuple[Dimension, Scale]:
+    return _mul_units(numpy.polymul, a1, a2)
+
+
+@_array_func(numpy.polydiv)
+def polydiv(a1: Quantity, a2: Quantity) -> Tuple[Dimension, Scale]:
+    return _div_units(numpy.polydiv, a1, a2)
 
 
 # Special handling for block method due to nested sequences
@@ -1929,13 +2036,7 @@ def irfft2(a: Quantity, s: Optional[Sequence[int]] = None, axes: Sequence[int] =
 #     return _multiply_units(numpy.einsum, *args, labels=labels, offset=1)
 
 # TODO: add any relevant functions from
-# numpy/fft/helper.py
-# numpy/fft/_pocketfft.py
-# numpy/lib/financial.py
 # numpy/lib/histograms.py
-# numpy/lib/index_tricks.py
-# numpy/lib/npyio.py
-# numpy/lib/polynomial.py
 # numpy/lib/recfunctions.py
 # numpy/lib/scimath.py
 # numpy/lib/twodim_base.py
