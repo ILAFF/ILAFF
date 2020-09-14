@@ -6,7 +6,7 @@ import inspect
 from itertools import chain
 import numpy  # type: ignore
 from pathlib import Path
-from typing import cast, Any, Optional, Tuple, Iterator, Iterable, Sequence, List, Type, Callable, Mapping, MutableMapping, Union, Sized, TextIO, BinaryIO
+from typing import cast, overload, Any, Optional, Tuple, Iterator, Iterable, Sequence, List, Type, Callable, Mapping, MutableMapping, Union, Sized, TextIO, BinaryIO
 
 from .dimension import Dimension, Scalar
 
@@ -124,22 +124,38 @@ _ufuncs: MutableMapping[numpy.ufunc, _UfuncUnits] = defaultdict(_UfuncUnits)
 _arrayfuncs: MutableMapping[Callable, Callable] = {}
 
 
+def _delegate_to(delegate: Any) -> Callable[[Callable], Callable]:
+    def decorator(method: Callable) -> Callable:
+        return getattr(delegate, method.__name__)
+    return decorator
+
+
+def _delegate_as(fn: Callable) -> Callable[[Callable], Callable]:
+    def decorator(method: Callable) -> Callable:
+        return fn
+    return decorator
+
+
 def _op(method: Callable[["Quantity", Any], Any]) -> Callable[["Quantity", Any], "Quantity"]:
-    @wraps(method)
-    def fn(self: "Quantity", other: Any) -> "Quantity":
-        result: Quantity = getattr(super(Quantity, self), method.__name__)(other)
-        return result
-    return fn
+    return _delegate_to(numpy.lib.mixins.NDArrayOperatorsMixin)(method)
 
 
 def _iop(method: Callable[["Quantity", Any], Any]) -> Callable[["Quantity", Any], Any]:
+    wrapped = _delegate_to(numpy.lib.mixins.NDArrayOperatorsMixin)(method)
+
     @wraps(method)
     def fn(self: "Quantity", other: Any) -> Any:
         if isinstance(self.value, numpy.ndarray):
-            return getattr(super(Quantity, self), method.__name__)(other)
+            return wrapped(other)
         else:
             return NotImplemented
     return fn
+
+
+ArrayLike = Any
+Array = Any
+Dtype = Any
+Flags = Any
 
 
 @dataclass(frozen=True, eq=False, order=False)
@@ -288,6 +304,283 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin):
                 return type(self)(result, result_dimension, result_scale)
             else:
                 return result
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        try:
+            return self.value.shape
+        except AttributeError:
+            return ()
+
+    @property
+    def ndim(self) -> int:
+        try:
+            return self.value.ndim
+        except AttributeError:
+            return 0
+
+    @property
+    def T(self) -> "Quantity":
+        return Quantity(
+            self.value.T,
+            self.dimension,
+            self.scale,
+        )
+
+    @property
+    def dtype(self) -> Dtype:
+        return self.value.dtype
+
+    @property
+    def flags(self) -> Flags:
+        return self.value.flags
+
+    @property
+    def flat(self) -> Iterator["Quantity"]:
+        for v in self.value.flat:
+            yield Quantity(
+                v,
+                self.dimension,
+                self.scale,
+            )
+
+    @property
+    def imag(self) -> "Quantity":
+        return Quantity(
+            self.value.imag,
+            self.dimension,
+            self.scale,
+        )
+
+
+    @property
+    def itemsize(self) -> int:
+        return self.value.itemsize
+
+    @property
+    def nbytes(self) -> int:
+        return self.value.nbytes
+
+    @property
+    def real(self) -> "Quantity":
+        return Quantity(
+            self.value.real,
+            self.dimension,
+            self.scale,
+        )
+
+    @property
+    def size(self) -> int:
+        return self.value.size
+
+    @property
+    def strides(self) -> Tuple[int]:
+        return self.value.strides
+
+    @_delegate_to(numpy)
+    def any(self, axis: Optional[int] = None, out: Optional[numpy.ndarray] = None, keepdims: bool = False) -> Union[bool, numpy.ndarray]: ...
+
+    @_delegate_to(numpy)
+    def all(self, axis: Optional[int] = None, out: Optional[numpy.ndarray] = None, keepdims: bool = False) -> Union[bool, numpy.ndarray]: ...
+
+    @_delegate_to(numpy)
+    def argmax(self, axis: Optional[int] = None, out: Optional[numpy.ndarray] = None) -> numpy.ndarray: ...
+
+    @_delegate_to(numpy)
+    def argmin(self, axis: Optional[int] = None, out: Optional[numpy.ndarray] = None) -> numpy.ndarray: ...
+
+    @_delegate_to(numpy)
+    def argpartition(self, kth: Union[int, Sequence[int]], axis: Optional[int] = -1, kind: str = 'introselect', order: Optional[Union[str, Sequence[str]]] = None) -> numpy.ndarray: ...
+
+    @_delegate_to(numpy)
+    def argsort(self, axis: int = -1, kind: Optional[str] = None, order: Optional[Union[str, Sequence[str]]] = None) -> numpy.ndarray: ...
+
+    def astype(self, dtype: Dtype, order: str = 'K', casting: str = 'unsafe', subok: bool = True, copy: bool = True) -> "Quantity":
+        return Quantity(
+            self.value.astype(dtype, order=order, casting=casting, subok=subok, copy=copy),
+            self.dimension,
+            self.scale,
+        )
+
+    def byteswap(self, inplace: bool = False) -> "Quantity":
+        return Quantity(
+            self.byteswap(inplace),
+            self.dimension,
+            self.scale,
+        )
+
+    @_delegate_to(numpy)
+    def clip(self, a_min: "Quantity", a_max: "Quantity", out: Optional["Quantity"] = None, **kwargs: Any) -> "Quantity": ...
+
+    @_delegate_to(numpy)
+    def compress(self, condition: Array, axis: Optional[int] = None, out: Optional["Quantity"] = None) -> "Quantity": ...
+
+    @_delegate_to(numpy)
+    def conj(self) -> "Quantity": ...
+
+    @_delegate_to(numpy)
+    def conjugate(self) -> "Quantity": ...
+
+    @_delegate_to(numpy)
+    def copy(self, order: str = 'K') -> "Quantity": ...
+
+    @_delegate_to(numpy)
+    def cumprod(self, axis: Optional[int] = None, dtype: Optional[Dtype] = None, out: Optional["Quantity"] = None) -> "Quantity": ...
+
+    @_delegate_to(numpy)
+    def cumsum(self, axis: Optional[int] = None, dtype: Optional[Dtype] = None, out: Optional["Quantity"] = None) -> "Quantity": ...
+
+    @_delegate_to(numpy)
+    def diagonal(self, offset: int = 0, axis1: int = 0, axis2: int = 1) -> "Quantity": ...
+
+    @_delegate_to(numpy)
+    def dot(self, b: "Quantity", out: Optional["Quantity"] = None) -> "Quantity": ...
+
+    # TODO: implement pickling
+
+    # def dump(self, file: Union[str, Path]) -> None:
+
+    # def dumps(self) -> str:
+
+    def fill(self, value: "Quantity") -> None:
+        _ = _match_units(self.fill, self, value, offset=-1)
+        self.value.fill(value.value)
+
+    def flatten(self, order: str = 'C') -> "Quantity":
+        return Quantity(
+            self.value.flatten(order),
+            self.dimension,
+            self.scale,
+        )
+
+    def item(self, *args: Union[int, Tuple[int, ...]]) -> "Quantity":
+        return Quantity(
+            self.value.item(*args),
+            self.dimension,
+            self.scale,
+        )
+
+    @overload
+    def itemset(self, value: "Quantity") -> None: ...
+
+    @overload
+    def itemset(self, idx: Union[int, Tuple[int, ...]], value: "Quantity") -> None: ...
+
+    def itemset(self, *args) -> None:
+        if len(args) > 1:
+            val = args[1]
+            if not isinstance(val, Quantity):
+                val = Quantity(val, Scalar, self.scale)
+            _ = _match_units(self.itemset, self, args[1])
+            self.value.itemset(args[0], val.value)
+        else:
+            val = args[0]
+            if not isinstance(val, Quantity):
+                val = Quantity(val, Scalar, self.scale)
+            _ = _match_units(self.itemset, self, args[0], offset=-1)
+            self.value.itemset(args[0].value)
+
+    @_delegate_as(numpy.amax)
+    def max(self, axis: Optional[Union[int, Sequence[int]]] = None, out: Optional["Quantity"] = None, keepdims: Optional[bool] = None, initial: Optional["Quantity"] = None, where: Optional[ArrayLike] = None) -> "Quantity": ...
+
+    @_delegate_to(numpy)
+    def mean(self, axis: Optional[Union[int, Sequence[int]]] = None, dtype: Optional[Dtype] = None, out: Optional["Quantity"] = None, keepdims: Optional[bool] = None) -> "Quantity":
+        return numpy.mean(self, axis, dtype, out, keepdims)
+
+    @_delegate_as(numpy.amin)
+    def min(self, axis: Optional[Union[int, Sequence[int]]] = None, out: Optional["Quantity"] = None, keepdims: Optional[bool] = None, initial: Optional["Quantity"] = None, where: Optional[ArrayLike] = None) -> "Quantity": ...
+
+    def newbyteorder(self, new_order: str = 'S') -> "Quantity":
+        return Quantity(
+            self.value.newbyteorder(new_order),
+            self.dimension,
+            self.scale
+        )
+
+    def nonzero(self) -> numpy.ndarray:
+        return self.value.nonzero()
+
+    @_delegate_to(numpy)
+    def partition(self, kth: Union[int, Sequence[int]], axis: int = -1, kind: str = 'introselect', order: Optional[Union[str, Sequence[str]]] = None) -> "Quantity": ...
+
+    @_delegate_to(numpy)
+    def prod(self, axis: Optional[Union[int, Sequence[int]]] = None, dtype: Optional[Dtype] = None, out: Optional["Quantity"] = None, keepdims: Optional[bool] = None, initial: Optional["Quantity"] = None, where: ArrayLike = True) -> "Quantity": ...
+
+    @_delegate_to(numpy)
+    def ptp(self, axis: Optional[Union[int, Sequence[int]]] = None, out: Optional["Quantity"] = None, keepdims: bool = False) -> "Quantity": ...
+
+    @_delegate_to(numpy)
+    def put(self, indices: ArrayLike, values: "Quantity", mode: str = 'raise') -> None: ...
+
+    @_delegate_to(numpy)
+    def ravel(self, order: str = 'C') -> "Quantity": ...
+
+    @_delegate_to(numpy)
+    def repeat(self, repeats: Union[int, Array], axis: Optional[int] = None) -> "Quantity": ...
+
+    @_delegate_to(numpy)
+    def reshape(self, shape: Union[int, Sequence[int]], order: str = 'C') -> "Quantity": ...
+
+    def resize(self, new_shape: Union[int, Sequence[int]], refcheck: bool = True) -> "Quantity":
+        return Quantity(
+            self.value.resize(new_shape, refcheck),
+            self.dimension,
+            self.scale,
+        )
+
+    @_delegate_to(numpy)
+    def round(self, decimals: int = 0, out: Optional["Quantity"] = None) -> "Quantity": ...
+
+    @_delegate_to(numpy)
+    def searchsorted(self, v: "Quantity", side: str = 'left', sorter: Optional[ArrayLike] = None) -> "Quantity": ...
+
+    def setflags(self, write: Optional[bool] = None, align: Optional[bool] = None, uic: Optional[bool] = None) -> None:
+        self.value.setflags(write, align, uic)
+
+    def sort(self, axis: int = -1, kind: Optional[str] = None, order: Optional[Union[str, Sequence[str]]] = None) -> None:
+        self.value.sort(axis, kind, order)
+
+    @_delegate_to(numpy)
+    def squeeze(self, axis: Optional[int] = None) -> "Quantity": ...
+
+    @_delegate_to(numpy)
+    def std(self, axis: Optional[Union[int, Sequence[int]]] = None, dtype: Optional[Dtype] = None, out: Optional["Quantity"] = None, ddof: int = 0, keepdims: bool = False) -> "Quantity": ...
+
+    @_delegate_to(numpy)
+    def sum(self, axis: Optional[Union[int, Sequence[int]]] = None, dtype: Optional[Dtype] = None, out: Optional["Quantity"] = None, keepdims: Optional[bool] = None, initial: Optional["Quantity"] = None, where: ArrayLike = True) -> "Quantity": ...
+
+    @_delegate_to(numpy)
+    def swapaxes(self, axis1: int, axis2: int) -> "Quantity": ...
+
+    @_delegate_to(numpy)
+    def take(self, indices: ArrayLike, axis: Optional[int] = None, out: Optional["Quantity"] = None, mode: str = 'raise') -> "Quantity": ...
+
+    def tolist() -> "Quantity":
+        return Quantity(
+            self.value.tolist(),
+            self.dimension,
+            self.scale,
+        )
+
+    @_delegate_to(numpy)
+    def trace(self, offset: int = 0, axis1: int = 0, axis2: int = 1, dtype: Optional[Dtype] = None, out: Optional["Quantity"] = None) -> "Quantity": ...
+
+    def transpose(self, *axes: int) -> "Quantity":
+        return Quantity(
+            self.value.transpose(*axes),
+            self.dimension,
+            self.scale,
+        )
+
+    @_delegate_to(numpy)
+    def var(self, axis: Optional[Union[int, Sequence[int]]] = None, dtype: Optional[Dtype] = None, out: Optional["Quantity"] = None, ddof: int = 0, keepdims: bool = False) -> "Quantity": ...
+
+    def view(self, *args, **kwargs) -> "Quantity":
+        return Quantity(
+            self.value.view(*arg, **kwargs),
+            self.dimension,
+            self.scale,
+        )
 
     @_op
     def __add__(self, other: Any) -> "Quantity": ...
@@ -548,11 +841,6 @@ def _array_func(func: Callable) -> Callable[[Callable], Callable]:
     return decorator
 
 
-ArrayLike = Any
-Array = Any
-Dtype = Any
-
-
 @_array_func(numpy.take)
 def take(a: Quantity, indices: ArrayLike, axis: Optional[int] = None, out: Optional[Quantity] = None, mode: str = 'raise') -> Tuple[Dimension, Scale]:
     if out is not None:
@@ -595,12 +883,12 @@ def transpose(a: Quantity, axes: Optional[Sequence[int]] = None) -> Tuple[Dimens
 
 
 @_array_func(numpy.partition)
-def partition(a: Quantity, kth: Union[int, Sequence[int]], axis: Optional[int] = -1, kind: str = 'introselect', order: Optional[Union[str, Sequence[str]]] = None) -> Tuple[Dimension, Scale]:
+def partition(a: Quantity, kth: Union[int, Sequence[int]], axis: int = -1, kind: str = 'introselect', order: Optional[Union[str, Sequence[str]]] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.argpartition)
-def argpartition(a: Quantity, kth: Union[int, Sequence[int]], axis: Optional[int] = -1, kind: str = 'introselect', order: Optional[Union[str, Sequence[str]]] = None) -> None:
+def argpartition(a: Quantity, kth: Union[int, Sequence[int]], axis: int = -1, kind: str = 'introselect', order: Optional[Union[str, Sequence[str]]] = None) -> None:
     return None
 
 
