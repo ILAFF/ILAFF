@@ -8,7 +8,6 @@ import numpy as np # type: ignore
 
 import resample as res # type: ignore
 
-
 @dataclass(frozen=True, eq=False, order=False)
 class measurement:
     iValue: Quantity
@@ -44,38 +43,42 @@ class measurement:
         
 
 
+
+
         #=,>,<,>=,<= comparators
     def __eq__(self, other: Any) -> Any:
         if isinstance(other, measurement):            
             equal = False
-            if self.iValue == other.iValue:
-                if self.dValue == other.dValue:
+            #if self.iValue == other.iValue).all():
+            if (self.iValue == other.iValue).all():
+                #if self.dValue == other.dValue).all():
+                if (self.dValue == other.dValue).all():
                     equal = True
             return equal
         else:
             return False
     def __lt__(self, other: "measurement")-> Any:
         equal = False
-        if self.iValue == other.iValue:
-            if self.dValue < other.dValue:
+        if (self.iValue == other.iValue).all():
+            if (self.dValue < other.dValue).all():
                 equal = True
         return equal
     def __le__(self, other: "measurement")-> Any:
         equal = False
-        if self.iValue == other.iValue:
-            if self.dValue <= other.dValue:
+        if (self.iValue == other.iValue).all():
+            if (self.dValue <= other.dValue).all():
                 equal = True
         return equal
     def __gt__(self, other: "measurement")-> Any:
         equal = False
-        if self.iValue == other.iValue:
-            if self.dValue > other.dValue:
+        if (self.iValue == other.iValue).all():
+            if (self.dValue > other.dValue).all():
                 equal = True
         return equal
     def __ge__(self, other: "measurement")-> Any:
         equal = False
-        if self.iValue == other.iValue:
-            if self.dValue >= other.dValue:
+        if (self.iValue == other.iValue).all():
+            if (self.dValue >= other.dValue).all():
                 equal = True
         return equal
     #negation, add, right addition, sub, right sub
@@ -86,7 +89,7 @@ class measurement:
         )
     def __add__(self, other: Any) -> "measurement":
         if isinstance(other, measurement):
-            if not self.iValue == other.iValue:
+            if not (self.iValue == other.iValue).all():
                 print('TODO: Format the printing of two iValues')
                 raise ValueError(
                     "Can't add values: Incompatible independent variables"
@@ -103,7 +106,7 @@ class measurement:
             )
     def __radd__(self, other: Any) -> "measurement":
         if isinstance(other, measurement):
-            if not self.iValue == other.iValue:
+            if not (self.iValue == other.iValue).all():
                 print('TODO: Format the printing of two iValues')
                 raise ValueError(
                     "Can't add values: Incompatible independent variables"
@@ -121,7 +124,7 @@ class measurement:
 
     def __sub__(self, other: Any) -> "measurement":
         if isinstance(other, measurement):
-            if not self.iValue == other.iValue:
+            if not (self.iValue == other.iValue).all():
                 print('TODO: Format the printing of two iValues')
                 raise ValueError(
                     "Can't add values: Incompatible independent variables"
@@ -138,7 +141,7 @@ class measurement:
             )
     def __rsub__(self, other: Any) -> "measurement":
         if isinstance(other, measurement):
-            if not self.iValue == other.iValue:
+            if not (self.iValue == other.iValue).all():
                 print('TODO: Format the printing of two iValues')
                 raise ValueError(
                     "Can't add values: Incompatible independent variables"
@@ -156,7 +159,7 @@ class measurement:
     #mult, right mult, truediv, right true div
     def __mul__(self, other: Any) -> "measurement":
         if isinstance(other, measurement):
-            if not self.iValue == other.iValue:
+            if not (self.iValue == other.iValue).all():
                 print('TODO: Format the printing of two iValues')
                 raise ValueError(
                     "Can't add values: Incompatible independent variables"
@@ -173,7 +176,7 @@ class measurement:
             )            
     def __rmul__(self, other: Any) -> "measurement":
         if isinstance(other, measurement):
-            if not self.iValue == other.iValue:
+            if not (self.iValue == other.iValue).all():
                 print('TODO: Format the printing of two iValues')
                 raise ValueError(
                     "Can't add values: Incompatible independent variables"
@@ -190,7 +193,7 @@ class measurement:
             )
     def __truediv__( self, other: Any) -> "measurement":
         if isinstance(other, measurement):
-            if not self.iValue == other.iValue:
+            if not (self.iValue == other.iValue).all():
                 print('TODO: Format the printing of two iValues')
                 raise ValueError(
                     "Can't add values: Incompatible independent variables"
@@ -207,7 +210,7 @@ class measurement:
             )
     def __rtruediv__(self, other: Any) -> "measurement":
         if isinstance(other, measurement):
-            if not self.iValue == other.iValue:
+            if not (self.iValue == other.iValue).all():
                 print('TODO: Format the printing of two iValues')
                 raise ValueError(
                     "Can't add values: Incompatible independent variables"

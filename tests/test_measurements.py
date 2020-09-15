@@ -3,7 +3,7 @@ from ilaff import measurements, units
 
 import numpy as np  # type: ignore
 
-import pytest
+import pytest # type: ignore
 
 #TEST MEASUREMENTJACK
 
@@ -221,13 +221,16 @@ def test_makeJack() -> None:
     a1 = units.Quantity(1.0, units.Length, latt1)
     
     x = np.array( [ 1, 2 ] ) * a1
-    y = np.array( [ [ 1, 2 ], [ 3, 4 ] ] ) / a1
+    y = np.array( [ [ 1, 2 ], [ 3, 5 ], [ 4, 6 ] ] ) / a1
     Meas = measurements.measurement( x, y )
     measJack = Meas.measResample('jack')
     assert( y[0][1] == 2 /a1 )
     assert( ( measJack.iValue == x).all() )
-    assert( measJack.dValue[0] == 2 /a1 )
-    assert( measJack.dValue[1] == 3 /a1 )
-    #assert( measJack.jackDV == 3 /a1 )
-    #assert( measJack.dValue[1] == 3 /a1 )
-    assert True
+    assert( measJack.dValue[0] == ( (1.0+3.0+4.0)/3.0 ) /a1 )
+    assert( measJack.dValue[1] ==  ( (2.0+5.0+6.0)/3.0 ) /a1 )
+    assert( ( measJack.jackDV[0] == np.array([3.5,5.5]) /a1 ).all() )
+    assert( ( measJack.jackDV[1] == np.array([2.5,4.0]) /a1 ).all() )
+    assert( ( measJack.jackDV[2] == np.array([2,3.5]) /a1 ).all() )
+
+    jackErr=measJack.jackerr()
+    assert( ( jackErr == np.array( [0.8819171036881968,1.2018504251546631] ) /a1).all() )

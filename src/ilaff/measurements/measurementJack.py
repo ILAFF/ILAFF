@@ -56,16 +56,26 @@ class measurementJack:
         return Quantity( jerr, self.jackDV[1].dimension, self.jackDV[1].scale )        
         """
 
-
-
+        #i.e jackknife error from tempJack[tt] = [ 1, 3, 4 ] is 0.8819171
+        
+        tempJack = np.flipud( np.rot90(self.jackDV.value) )
+        jerr = np.empty( [ len(self.iValue) ] )
+        for tt in range(0,len(self.iValue) ):
+            #non ufunc versions
+            avg = np.mean( tempJack[tt] )
+            err = np.sqrt( ( np.sum( ( tempJack[tt] - avg )**2.0 ) ) * ( float(len(tempJack[tt])-1)/float(len(tempJack[tt])) ) )
+            jerr[tt] = err
+        return Quantity( jerr, self.jackDV[1].dimension, self.jackDV[1].scale )
+        #self.dValueJErr = Quantity( jerr, self.jackDV[1].dimension, self.jackDV[1].scale )        
+        #return self.dValueJErr
 
 
     #=,>,<,>=,<= comparators
     def __eq__(self, other: Any) -> Any:
-        if isinstance(other, measurementJack):            
+        if isinstance(other, measurementJack):
             equal = False
-            if self.iValue == other.iValue:
-                if self.dValue == other.dValue:
+            if (self.iValue == other.iValue).all():
+                if (self.dValue == other.dValue).all():
                     print('TODO: TEST JACKKNIFES')
                     equal = True
             return equal
@@ -73,29 +83,29 @@ class measurementJack:
             return False
     def __lt__(self, other: "measurementJack")-> Any:
         equal = False
-        if self.iValue == other.iValue:
-            if self.dValue < other.dValue:
+        if (self.iValue == other.iValue).all():
+            if (self.dValue < other.dValue).all():
                 print('TODO: TEST JACKKNIFES')
                 equal = True
         return equal
     def __le__(self, other: "measurementJack")-> Any:
         equal = False
-        if self.iValue == other.iValue:
-            if self.dValue <= other.dValue:
+        if (self.iValue == other.iValue).all():
+            if (self.dValue <= other.dValue).all():
                 print('TODO: TEST JACKKNIFES')
                 equal = True
         return equal
     def __gt__(self, other: "measurementJack")-> Any:
         equal = False
-        if self.iValue == other.iValue:
-            if self.dValue > other.dValue:
+        if (self.iValue == other.iValue).all():
+            if (self.dValue > other.dValue).all():
                 print('TODO: TEST JACKKNIFES')
                 equal = True
         return equal
     def __ge__(self, other: "measurementJack")-> Any:
         equal = False
-        if self.iValue == other.iValue:
-            if self.dValue >= other.dValue:
+        if (self.iValue == other.iValue).all():
+            if (self.dValue >= other.dValue).all():
                 print('TODO: TEST JACKKNIFES')
                 equal = True
         return equal
@@ -108,7 +118,7 @@ class measurementJack:
         )
     def __add__(self, other: Any) -> "measurementJack":
         if isinstance(other, measurementJack):
-            if not self.iValue == other.iValue:
+            if not (self.iValue == other.iValue).all():
                 print('TODO: Format the printing of two iValues')
                 raise ValueError(
                     "Can't add values: Incompatible independent variables"
@@ -127,7 +137,7 @@ class measurementJack:
             )
     def __radd__(self, other: Any) -> "measurementJack":
         if isinstance(other, measurementJack):
-            if not self.iValue == other.iValue:
+            if not (self.iValue == other.iValue).all():
                 print('TODO: Format the printing of two iValues')
                 raise ValueError(
                     "Can't add values: Incompatible independent variables"
@@ -147,7 +157,7 @@ class measurementJack:
 
     def __sub__(self, other: Any) -> "measurementJack":
         if isinstance(other, measurementJack):
-            if not self.iValue == other.iValue:
+            if not (self.iValue == other.iValue).all():
                 print('TODO: Format the printing of two iValues')
                 raise ValueError(
                     "Can't add values: Incompatible independent variables"
@@ -166,7 +176,7 @@ class measurementJack:
             )
     def __rsub__(self, other: Any) -> "measurementJack":
         if isinstance(other, measurementJack):
-            if not self.iValue == other.iValue:
+            if not (self.iValue == other.iValue).all():
                 print('TODO: Format the printing of two iValues')
                 raise ValueError(
                     "Can't add values: Incompatible independent variables"
@@ -186,7 +196,7 @@ class measurementJack:
     #mult, right mult, truediv, right true div
     def __mul__(self, other: Any) -> "measurementJack":
         if isinstance(other, measurementJack):
-            if not self.iValue == other.iValue:
+            if not (self.iValue == other.iValue).all():
                 print('TODO: Format the printing of two iValues')
                 raise ValueError(
                     "Can't add values: Incompatible independent variables"
@@ -205,7 +215,7 @@ class measurementJack:
             )            
     def __rmul__(self, other: Any) -> "measurementJack":
         if isinstance(other, measurementJack):
-            if not self.iValue == other.iValue:
+            if not (self.iValue == other.iValue).all():
                 print('TODO: Format the printing of two iValues')
                 raise ValueError(
                     "Can't add values: Incompatible independent variables"
@@ -224,7 +234,7 @@ class measurementJack:
             )
     def __truediv__( self, other: Any) -> "measurementJack":
         if isinstance(other, measurementJack):
-            if not self.iValue == other.iValue:
+            if not (self.iValue == other.iValue).all():
                 print('TODO: Format the printing of two iValues')
                 raise ValueError(
                     "Can't add values: Incompatible independent variables"
@@ -243,7 +253,7 @@ class measurementJack:
             )
     def __rtruediv__(self, other: Any) -> "measurementJack":
         if isinstance(other, measurementJack):
-            if not self.iValue == other.iValue:
+            if not (self.iValue == other.iValue).all():
                 print('TODO: Format the printing of two iValues')
                 raise ValueError(
                     "Can't add values: Incompatible independent variables"
