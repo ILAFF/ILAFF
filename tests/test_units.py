@@ -1,5 +1,5 @@
 from ilaff import units
-import pytest  # type: ignore
+import pytest
 
 
 def test_mismatched() -> None:
@@ -89,7 +89,7 @@ def test_format() -> None:
 
 
 def test_roots() -> None:
-    assert units.Dimension(-4).sqrt() == units.Dimension(-2)
+    assert units.Dimension(-4)**0.5 == units.Dimension(-2)
 
     latt = units.Lattice()
     t_current = (21 - 16) * units.a(latt)
@@ -97,41 +97,41 @@ def test_roots() -> None:
     m_N = 0.49 / units.a(latt)
 
     with pytest.raises(ValueError):
-        t_current.sqrt()
+        t_current**0.5
 
     with pytest.raises(ValueError):
-        m_pi_squared.root(3)
+        m_pi_squared**(1 / 3)
 
     with pytest.raises(ValueError):
-        m_N.root(-4)
+        m_N**(-1 / 4)
 
-    assert (
+    assert ((
         m_pi_squared
-    ).sqrt().in_unit(
+    )**0.5).in_unit(
         1 / units.a(latt)
     ) == pytest.approx(0.068)
-    assert (
+    assert ((
         t_current / m_pi_squared / m_N
-    ).root(4).in_unit(
+    )**0.25).in_unit(
         units.a(latt)
     ) == pytest.approx((5 / 0.068 / 0.068 / 0.49)**0.25)
-    assert (
+    assert ((
         m_pi_squared * m_N
-    ).root(-3).in_unit(
+    )**(-1 / 3)).in_unit(
         units.a(latt)
     ) == pytest.approx((1 / 0.068 / 0.068 / 0.49)**(1 / 3))
 
     m_N = m_N.set_scale(units.a(latt), 0.0913 * units.fm)
 
-    assert (
+    assert ((
         m_N**2
-    ).sqrt().in_unit(
+    )**0.5).in_unit(
         units.MeV
     ) == pytest.approx(0.49 / 0.0913 * 197.3269788)
 
-    assert (
+    assert ((
         m_pi_squared**3 / t_current**2
-    ).root(4).set_scale(
+    )**0.25).set_scale(
         units.a(latt), 0.0913 * units.fm
     ).in_unit(
         units.fm**-2
@@ -187,7 +187,7 @@ def test_cmp() -> None:
         with pytest.raises(ValueError):
             t_current >= other
 
-    m_phys = m_pi_squared.set_scale(units.a(latt), 0.0898 * units.fm).sqrt()
+    m_phys = m_pi_squared.set_scale(units.a(latt), 0.0898 * units.fm)**0.5
     assert 1 / m_phys != t_phys
     assert not (1 / m_phys == t_phys)
     assert 1 / m_phys > t_phys

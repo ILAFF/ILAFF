@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Union
 
 
 @dataclass(frozen=True)
@@ -22,20 +23,20 @@ class Dimension:
     def __truediv__(self, other: "Dimension") -> "Dimension":
         return Dimension(self.mass_dim - other.mass_dim)
 
-    def __pow__(self, exponent: int) -> "Dimension":
-        return Dimension(self.mass_dim * exponent)
-
-    def root(self, exponent: int) -> "Dimension":
-        if self.mass_dim % exponent != 0:
-            if exponent == 2:
+    def __pow__(self, exponent: Union[int, float]) -> "Dimension":
+        dim = self.mass_dim * exponent
+        if int(dim) != dim:
+            if exponent == 1/2 and self.mass_dim % 2 != 0:
                 raise ValueError("Can't take square root of {}".format(self))
-            if exponent == 3:
+            if exponent == 1/2 and self.mass_dim % 3 != 0:
                 raise ValueError("Can't take cube root of {}".format(self))
-            raise ValueError("Can't take {}-th root of {}".format(exponent, self))
-        return Dimension(self.mass_dim // exponent)
-
-    def sqrt(self) -> "Dimension":
-        return self.root(2)
+            if (1 / exponent).is_integer():
+                raise ValueError("Can't take {}-th root of {}".format(int(1/exponent), self))
+            raise ValueError(
+                "Can't raise {} to the power of {}: resulting mass dim {} is not an integer"
+                .format(self, exponent, dim)
+            )
+        return Dimension(int(dim))
 
     def scale(self, scale: float) -> float:
         return scale**self.mass_dim
