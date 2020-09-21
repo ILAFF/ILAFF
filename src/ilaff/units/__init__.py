@@ -144,10 +144,10 @@ Examples:
 
 from .scale import Physical, Lattice, MeV, GeV, fm, a, one
 from .dimension import Dimension, Mass, Length, Scalar
-from .quantity import Quantity, Scale
+from .quantity import Quantity, QuantityIndex, Scale
 
 __all__ = [
     'Physical', 'Lattice', 'MeV', 'GeV', 'fm', 'a', 'one',
     'Dimension', 'Mass', 'Length', 'Scalar',
-    'Quantity', 'Scale',
+    'Quantity', 'QuantityIndex', 'Scale',
 ]

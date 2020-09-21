@@ -5,4 +5,15 @@
 #    pip-compile requirements.in
 #
 -e .  # via -r requirements.in
-numpy==1.18.4             # via ilaff
+iminuit==1.4.9            # via ilaff
+numpy==1.18.4             # via ilaff, iminuit, pandas, resample, scipy, xarray
+pandas==1.1.2             # via xarray
+python-dateutil==2.8.1    # via pandas
+pytz==2020.1              # via pandas
+resample==1.0.1           # via ilaff
+scipy==1.5.2              # via resample
+six==1.15.0               # via python-dateutil
+xarray==0.16.0            # via ilaff
+
+# The following packages are considered to be unsafe in a requirements file:
+# setuptools
