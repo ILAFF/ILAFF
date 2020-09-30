@@ -1408,7 +1408,7 @@ def inner(a: Quantity, b: Quantity) -> Tuple[Dimension, Scale]:
     return _multiply_units(numpy.inner, a, b)
 
 
-@_array_func(numpy.inner)
+@_array_func(numpy.where)
 def where(condition: ArrayLike, x: Optional[Quantity] = None, y: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
     if x is None:
         if y is None:
