@@ -5,7 +5,7 @@ lattice spacing. This ensures that the independent lattice spacings are kept
 distinct.
 
 New quantities should generally be constructed by multiplying a float, numpy
-array, or other raw value by one of the provided units (i.e. ``units.MeV``, 
+array, or other raw value by one of the provided units (i.e. ``units.MeV``,
 ``units.GeV``, ``units.fm``, or ``units.a(scale)``).
 
 Examples:

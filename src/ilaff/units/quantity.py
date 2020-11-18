@@ -3,10 +3,12 @@ from collections import defaultdict
 from dataclasses import dataclass
 from functools import wraps
 import inspect
-from itertools import chain
 import numpy  # type: ignore
 from pathlib import Path
-from typing import cast, overload, Any, Optional, Tuple, Iterator, Iterable, Sequence, List, Type, Callable, Mapping, MutableMapping, Union, Sized, TextIO, BinaryIO
+from typing import (
+    cast, overload, Any, Optional, Tuple, Iterator, Iterable, Sequence, List,
+    Type, Callable, Mapping, MutableMapping, Union, Sized, TextIO, BinaryIO,
+)
 
 from .dimension import Dimension, Scalar
 
@@ -33,25 +35,29 @@ def _argument_name(index: int, labels: Mapping[int, str], offset: int, argument:
         return f"{argument} {index + 1 + offset}"
 
 
-def _scalar_units(func: Callable, *inputs: "Quantity", labels: Mapping[int, str] = {}, offset: int = 0, argument: str = "argument") -> Tuple[Dimension, Scale]:
+def _scalar_units(func: Callable, *inputs: "Quantity", labels: Mapping[int, str] = {},
+                  offset: int = 0, argument: str = "argument") -> Tuple[Dimension, Scale]:
     dimension = Scalar
     scale = inputs[0].scale
     for i, x in enumerate(inputs):
         if x.dimension != dimension:
             raise ValueError(
-                f"Invalid mass dimension for {_argument_name(i, labels, offset, argument)} of {func.__name__}: got {x.dimension}, expected {dimension}"
+                f"Invalid mass dimension for {_argument_name(i, labels, offset, argument)}"
+                f" of {func.__name__}: got {x.dimension}, expected {dimension}"
             )
 
     return dimension, scale
 
 
-def _match_units(func: Callable, *inputs: "Quantity", labels: Mapping[int, str] = {}, offset: int = 0, argument: str = "argument") -> Tuple[Dimension, Scale]:
+def _match_units(func: Callable, *inputs: "Quantity", labels: Mapping[int, str] = {},
+                 offset: int = 0, argument: str = "argument") -> Tuple[Dimension, Scale]:
     dimension = inputs[0].dimension
     scale = inputs[0].scale
     for i, x in enumerate(inputs):
         if x.dimension != dimension:
             raise ValueError(
-                f"Invalid mass dimension for {_argument_name(i, labels, offset, argument)} of {func.__name__}: got {x.dimension}, expected {dimension}"
+                f"Invalid mass dimension for {_argument_name(i, labels, offset, argument)}"
+                f" of {func.__name__}: got {x.dimension}, expected {dimension}"
             )
         if x.dimension != Scalar and x.scale != scale:
             raise ValueError(
@@ -61,7 +67,8 @@ def _match_units(func: Callable, *inputs: "Quantity", labels: Mapping[int, str] 
     return dimension, scale
 
 
-def _multiply_units(func: Callable, *inputs: "Quantity", labels: Mapping[int, str] = {}, offset: int = 0, argument: str = "argument") -> Tuple[Dimension, Scale]:
+def _multiply_units(func: Callable, *inputs: "Quantity", labels: Mapping[int, str] = {},
+                    offset: int = 0, argument: str = "argument") -> Tuple[Dimension, Scale]:
     dimension = inputs[0].dimension
     scale = inputs[0].scale
     for i, x in enumerate(inputs):
@@ -77,7 +84,8 @@ def _multiply_units(func: Callable, *inputs: "Quantity", labels: Mapping[int, st
     return dimension, scale
 
 
-def _divide_units(func: Callable, *inputs: "Quantity", labels: Mapping[int, str] = {}, offset: int = 0, argument: str = "argument") -> Tuple[Dimension, Scale]:
+def _divide_units(func: Callable, *inputs: "Quantity", labels: Mapping[int, str] = {},
+                  offset: int = 0, argument: str = "argument") -> Tuple[Dimension, Scale]:
     dimension = inputs[0].dimension
     scale = inputs[0].scale
     for i, x in enumerate(inputs):
@@ -93,14 +101,16 @@ def _divide_units(func: Callable, *inputs: "Quantity", labels: Mapping[int, str]
     return dimension, scale
 
 
-def _power_units(func: Callable, *inputs: "Quantity", labels: Mapping[int, str] = {}, offset: int = 0, argument: str = "argument") -> Tuple[Dimension, Scale]:
+def _power_units(func: Callable, *inputs: "Quantity", labels: Mapping[int, str] = {},
+                 offset: int = 0, argument: str = "argument") -> Tuple[Dimension, Scale]:
     dimension = inputs[0].dimension
     scale = inputs[0].scale
     for i, x in enumerate(inputs):
         if i > 0:
             if x.dimension != Scalar:
                 raise ValueError(
-                    f"Invalid mass dimension for {_argument_name(i, labels, offset, argument)} of {func.__name__}: got {x.dimension}, expected {Scalar}"
+                    f"Invalid mass dimension for {_argument_name(i, labels, offset, argument)}"
+                    f" of {func.__name__}: got {x.dimension}, expected {Scalar}"
                 )
             dimension = dimension**x.value
 
@@ -244,7 +254,8 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin):
                 self.scale,
             )
 
-    def __array_function__(self, func: Callable, types: Iterable[Type], args: Iterable[Any], kwargs: Mapping[str, Any]) -> Any:
+    def __array_function__(self, func: Callable, types: Iterable[Type],
+                           args: Iterable[Any], kwargs: Mapping[str, Any]) -> Any:
         func_units = _arrayfuncs.get(func)
         if func_units is None:
             return NotImplemented
@@ -274,7 +285,8 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin):
                         )
                     if x.dimension != result_dimension:
                         raise ValueError(
-                            f"Invalid mass dimension for '{ufunc.__name__}' output: was {x.dimension}, should be {result_dimension}"
+                            f"Invalid mass dimension for '{ufunc.__name__}' output:"
+                            f" was {x.dimension}, should be {result_dimension}"
                         )
                     if x.scale != result_scale:
                         raise ValueError(
@@ -290,8 +302,17 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin):
                 x.value if isinstance(x, Quantity) else x
                 for x in out)
 
-        result = getattr(ufunc, method)(*inputs, **kwargs)
+        return self._wrap_ufunc_output(
+            getattr(ufunc, method)(*inputs, **kwargs),
+            ufunc_units,
+            result_dimension,
+            result_scale,
+            method,
+        )
 
+    def _wrap_ufunc_output(self, result: Any, ufunc_units: _UfuncUnits,
+                           result_dimension: Dimension, result_scale: Scale,
+                           method: str) -> Any:
         if type(result) is tuple:
             if ufunc_units.wrap_output:
                 return tuple(type(self)(x, result_dimension, result_scale) for x in result)
@@ -352,7 +373,6 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin):
             self.scale,
         )
 
-
     @property
     def itemsize(self) -> int:
         return self.value.itemsize
@@ -378,10 +398,12 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin):
         return self.value.strides
 
     @_delegate_to(numpy)
-    def any(self, axis: Optional[int] = None, out: Optional[numpy.ndarray] = None, keepdims: bool = False) -> Union[bool, numpy.ndarray]: ...
+    def any(self, axis: Optional[int] = None, out: Optional[numpy.ndarray] = None,
+            keepdims: bool = False) -> Union[bool, numpy.ndarray]: ...
 
     @_delegate_to(numpy)
-    def all(self, axis: Optional[int] = None, out: Optional[numpy.ndarray] = None, keepdims: bool = False) -> Union[bool, numpy.ndarray]: ...
+    def all(self, axis: Optional[int] = None, out: Optional[numpy.ndarray] = None,
+            keepdims: bool = False) -> Union[bool, numpy.ndarray]: ...
 
     @_delegate_to(numpy)
     def argmax(self, axis: Optional[int] = None, out: Optional[numpy.ndarray] = None) -> numpy.ndarray: ...
@@ -390,12 +412,15 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin):
     def argmin(self, axis: Optional[int] = None, out: Optional[numpy.ndarray] = None) -> numpy.ndarray: ...
 
     @_delegate_to(numpy)
-    def argpartition(self, kth: Union[int, Sequence[int]], axis: Optional[int] = -1, kind: str = 'introselect', order: Optional[Union[str, Sequence[str]]] = None) -> numpy.ndarray: ...
+    def argpartition(self, kth: Union[int, Sequence[int]], axis: Optional[int] = -1, kind: str = 'introselect',
+                     order: Optional[Union[str, Sequence[str]]] = None) -> numpy.ndarray: ...
 
     @_delegate_to(numpy)
-    def argsort(self, axis: int = -1, kind: Optional[str] = None, order: Optional[Union[str, Sequence[str]]] = None) -> numpy.ndarray: ...
+    def argsort(self, axis: int = -1, kind: Optional[str] = None,
+                order: Optional[Union[str, Sequence[str]]] = None) -> numpy.ndarray: ...
 
-    def astype(self, dtype: Dtype, order: str = 'K', casting: str = 'unsafe', subok: bool = True, copy: bool = True) -> "Quantity":
+    def astype(self, dtype: Dtype, order: str = 'K', casting: str = 'unsafe',
+               subok: bool = True, copy: bool = True) -> "Quantity":
         return Quantity(
             self.value.astype(dtype, order=order, casting=casting, subok=subok, copy=copy),
             self.dimension,
@@ -410,10 +435,12 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin):
         )
 
     @_delegate_to(numpy)
-    def clip(self, a_min: "Quantity", a_max: "Quantity", out: Optional["Quantity"] = None, **kwargs: Any) -> "Quantity": ...
+    def clip(self, a_min: "Quantity", a_max: "Quantity",
+             out: Optional["Quantity"] = None, **kwargs: Any) -> "Quantity": ...
 
     @_delegate_to(numpy)
-    def compress(self, condition: Array, axis: Optional[int] = None, out: Optional["Quantity"] = None) -> "Quantity": ...
+    def compress(self, condition: Array, axis: Optional[int] = None,
+                 out: Optional["Quantity"] = None) -> "Quantity": ...
 
     @_delegate_to(numpy)
     def conj(self) -> "Quantity": ...
@@ -425,10 +452,12 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin):
     def copy(self, order: str = 'K') -> "Quantity": ...
 
     @_delegate_to(numpy)
-    def cumprod(self, axis: Optional[int] = None, dtype: Optional[Dtype] = None, out: Optional["Quantity"] = None) -> "Quantity": ...
+    def cumprod(self, axis: Optional[int] = None, dtype: Optional[Dtype] = None,
+                out: Optional["Quantity"] = None) -> "Quantity": ...
 
     @_delegate_to(numpy)
-    def cumsum(self, axis: Optional[int] = None, dtype: Optional[Dtype] = None, out: Optional["Quantity"] = None) -> "Quantity": ...
+    def cumsum(self, axis: Optional[int] = None, dtype: Optional[Dtype] = None,
+               out: Optional["Quantity"] = None) -> "Quantity": ...
 
     @_delegate_to(numpy)
     def diagonal(self, offset: int = 0, axis1: int = 0, axis2: int = 1) -> "Quantity": ...
@@ -481,14 +510,19 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin):
             self.value.itemset(args[0].value)
 
     @_delegate_as(numpy.amax)
-    def max(self, axis: Optional[Union[int, Sequence[int]]] = None, out: Optional["Quantity"] = None, keepdims: Optional[bool] = None, initial: Optional["Quantity"] = None, where: Optional[ArrayLike] = None) -> "Quantity": ...
+    def max(self, axis: Optional[Union[int, Sequence[int]]] = None,
+            out: Optional["Quantity"] = None, keepdims: Optional[bool] = None,
+            initial: Optional["Quantity"] = None, where: Optional[ArrayLike] = None) -> "Quantity": ...
 
     @_delegate_to(numpy)
-    def mean(self, axis: Optional[Union[int, Sequence[int]]] = None, dtype: Optional[Dtype] = None, out: Optional["Quantity"] = None, keepdims: Optional[bool] = None) -> "Quantity":
+    def mean(self, axis: Optional[Union[int, Sequence[int]]] = None, dtype: Optional[Dtype] = None,
+             out: Optional["Quantity"] = None, keepdims: Optional[bool] = None) -> "Quantity":
         return numpy.mean(self, axis, dtype, out, keepdims)
 
     @_delegate_as(numpy.amin)
-    def min(self, axis: Optional[Union[int, Sequence[int]]] = None, out: Optional["Quantity"] = None, keepdims: Optional[bool] = None, initial: Optional["Quantity"] = None, where: Optional[ArrayLike] = None) -> "Quantity": ...
+    def min(self, axis: Optional[Union[int, Sequence[int]]] = None,
+            out: Optional["Quantity"] = None, keepdims: Optional[bool] = None,
+            initial: Optional["Quantity"] = None, where: Optional[ArrayLike] = None) -> "Quantity": ...
 
     def newbyteorder(self, new_order: str = 'S') -> "Quantity":
         return Quantity(
@@ -501,13 +535,17 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin):
         return self.value.nonzero()
 
     @_delegate_to(numpy)
-    def partition(self, kth: Union[int, Sequence[int]], axis: int = -1, kind: str = 'introselect', order: Optional[Union[str, Sequence[str]]] = None) -> "Quantity": ...
+    def partition(self, kth: Union[int, Sequence[int]], axis: int = -1, kind: str = 'introselect',
+                  order: Optional[Union[str, Sequence[str]]] = None) -> "Quantity": ...
 
     @_delegate_to(numpy)
-    def prod(self, axis: Optional[Union[int, Sequence[int]]] = None, dtype: Optional[Dtype] = None, out: Optional["Quantity"] = None, keepdims: Optional[bool] = None, initial: Optional["Quantity"] = None, where: ArrayLike = True) -> "Quantity": ...
+    def prod(self, axis: Optional[Union[int, Sequence[int]]] = None, dtype: Optional[Dtype] = None,
+             out: Optional["Quantity"] = None, keepdims: Optional[bool] = None,
+             initial: Optional["Quantity"] = None, where: ArrayLike = True) -> "Quantity": ...
 
     @_delegate_to(numpy)
-    def ptp(self, axis: Optional[Union[int, Sequence[int]]] = None, out: Optional["Quantity"] = None, keepdims: bool = False) -> "Quantity": ...
+    def ptp(self, axis: Optional[Union[int, Sequence[int]]] = None,
+            out: Optional["Quantity"] = None, keepdims: bool = False) -> "Quantity": ...
 
     @_delegate_to(numpy)
     def put(self, indices: ArrayLike, values: "Quantity", mode: str = 'raise') -> None: ...
@@ -544,18 +582,24 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin):
     def squeeze(self, axis: Optional[int] = None) -> "Quantity": ...
 
     @_delegate_to(numpy)
-    def std(self, axis: Optional[Union[int, Sequence[int]]] = None, dtype: Optional[Dtype] = None, out: Optional["Quantity"] = None, ddof: int = 0, keepdims: bool = False) -> "Quantity": ...
+    def std(self, axis: Optional[Union[int, Sequence[int]]] = None,
+            dtype: Optional[Dtype] = None, out: Optional["Quantity"] = None,
+            ddof: int = 0, keepdims: bool = False) -> "Quantity": ...
 
     @_delegate_to(numpy)
-    def sum(self, axis: Optional[Union[int, Sequence[int]]] = None, dtype: Optional[Dtype] = None, out: Optional["Quantity"] = None, keepdims: Optional[bool] = None, initial: Optional["Quantity"] = None, where: ArrayLike = True) -> "Quantity": ...
+    def sum(self, axis: Optional[Union[int, Sequence[int]]] = None,
+            dtype: Optional[Dtype] = None, out: Optional["Quantity"] = None,
+            keepdims: Optional[bool] = None, initial: Optional["Quantity"] = None,
+            where: ArrayLike = True) -> "Quantity": ...
 
     @_delegate_to(numpy)
     def swapaxes(self, axis1: int, axis2: int) -> "Quantity": ...
 
     @_delegate_to(numpy)
-    def take(self, indices: ArrayLike, axis: Optional[int] = None, out: Optional["Quantity"] = None, mode: str = 'raise') -> "Quantity": ...
+    def take(self, indices: ArrayLike, axis: Optional[int] = None,
+             out: Optional["Quantity"] = None, mode: str = 'raise') -> "Quantity": ...
 
-    def tolist() -> "Quantity":
+    def tolist(self) -> "Quantity":
         return Quantity(
             self.value.tolist(),
             self.dimension,
@@ -563,7 +607,8 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin):
         )
 
     @_delegate_to(numpy)
-    def trace(self, offset: int = 0, axis1: int = 0, axis2: int = 1, dtype: Optional[Dtype] = None, out: Optional["Quantity"] = None) -> "Quantity": ...
+    def trace(self, offset: int = 0, axis1: int = 0, axis2: int = 1,
+              dtype: Optional[Dtype] = None, out: Optional["Quantity"] = None) -> "Quantity": ...
 
     def transpose(self, *axes: int) -> "Quantity":
         return Quantity(
@@ -573,11 +618,13 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin):
         )
 
     @_delegate_to(numpy)
-    def var(self, axis: Optional[Union[int, Sequence[int]]] = None, dtype: Optional[Dtype] = None, out: Optional["Quantity"] = None, ddof: int = 0, keepdims: bool = False) -> "Quantity": ...
+    def var(self, axis: Optional[Union[int, Sequence[int]]] = None,
+            dtype: Optional[Dtype] = None, out: Optional["Quantity"] = None,
+            ddof: int = 0, keepdims: bool = False) -> "Quantity": ...
 
     def view(self, *args, **kwargs) -> "Quantity":
         return Quantity(
-            self.value.view(*arg, **kwargs),
+            self.value.view(*args, **kwargs),
             self.dimension,
             self.scale,
         )
@@ -721,10 +768,10 @@ _ufuncs[numpy.rint] = _UfuncUnits(unit_map=_match_units)
 _ufuncs[numpy.sign] = _UfuncUnits(unit_map=_match_units, wrap_output=False)
 _ufuncs[numpy.conj] = _UfuncUnits(unit_map=_match_units)
 _ufuncs[numpy.conjugate] = _UfuncUnits(unit_map=_match_units)
-_ufuncs[numpy.sqrt] = _UfuncUnits(unit_map=lambda ufunc, x: _power_units(ufunc, x, Quantity(1 / 2, Scalar, x.scale)))
-_ufuncs[numpy.square] = _UfuncUnits(unit_map=lambda ufunc, x: _power_units(ufunc, x, Quantity(2, Scalar, x.scale)))
-_ufuncs[numpy.cbrt] = _UfuncUnits(unit_map=lambda ufunc, x: _power_units(ufunc, x, Quantity(1 / 3, Scalar, x.scale)))
-_ufuncs[numpy.reciprocal] = _UfuncUnits(unit_map=lambda ufunc, x: _divide_units(ufunc, Quantity(1, Scalar, x.scale), x, offset=-1))
+_ufuncs[numpy.sqrt] = _UfuncUnits(unit_map=lambda f, x: _power_units(f, x, Quantity(1 / 2, Scalar, x.scale)))
+_ufuncs[numpy.square] = _UfuncUnits(unit_map=lambda f, x: _power_units(f, x, Quantity(2, Scalar, x.scale)))
+_ufuncs[numpy.cbrt] = _UfuncUnits(unit_map=lambda f, x: _power_units(f, x, Quantity(1 / 3, Scalar, x.scale)))
+_ufuncs[numpy.reciprocal] = _UfuncUnits(unit_map=lambda f, x: _divide_units(f, Quantity(1, Scalar, x.scale), x, offset=-1))
 _ufuncs[numpy.greater] = _UfuncUnits(unit_map=_match_units, wrap_output=False)
 _ufuncs[numpy.greater_equal] = _UfuncUnits(unit_map=_match_units, wrap_output=False)
 _ufuncs[numpy.less] = _UfuncUnits(unit_map=_match_units, wrap_output=False)
@@ -740,10 +787,10 @@ _ufuncs[numpy.isinf] = _UfuncUnits(unit_map=_match_units, wrap_output=False)
 _ufuncs[numpy.isnan] = _UfuncUnits(unit_map=_match_units, wrap_output=False)
 _ufuncs[numpy.fabs] = _UfuncUnits(unit_map=_match_units)
 _ufuncs[numpy.signbit] = _UfuncUnits(unit_map=_match_units, wrap_output=False)
-_ufuncs[numpy.copysign] = _UfuncUnits(unit_map=lambda ufunc, x, y: _match_units(ufunc, x))
+_ufuncs[numpy.copysign] = _UfuncUnits(unit_map=lambda f, x, y: _match_units(f, x))
 _ufuncs[numpy.nextafter] = _UfuncUnits(unit_map=_match_units)
 _ufuncs[numpy.spacing] = _UfuncUnits(unit_map=_match_units)
-_ufuncs[numpy.ldexp] = _UfuncUnits(unit_map=lambda ufunc, x, y: _scalar_units(ufunc, y, offset=1) and _match_units(ufunc, x))
+_ufuncs[numpy.ldexp] = _UfuncUnits(unit_map=lambda f, x, y: _scalar_units(f, y, offset=1) and _match_units(f, x))
 
 
 # TODO: consider performance
@@ -752,11 +799,14 @@ def _array_func(func: Callable) -> Callable[[Callable], Callable]:
     def decorator(unit_map: Callable) -> Callable:
         signature = inspect.signature(unit_map)
         annotation: Mapping[str, Type] = {
-                name: Sequence[param.annotation] if param.kind is param.VAR_POSITIONAL
-                      else Mapping[str, param.annotation] if param.kind is param.VAR_KEYWORD
-                      else param.annotation  # type: ignore
+            name: (
+                Sequence[param.annotation] if param.kind is param.VAR_POSITIONAL
+                else Mapping[str, param.annotation] if param.kind is param.VAR_KEYWORD
+                else param.annotation  # type: ignore
+            )
             for name, param in signature.parameters.items()
         }
+
         def wrapper(args: Iterable[Any], kwargs: Mapping[str, Any]) -> Any:
             bound = signature.bind(*args, **kwargs)
             try:
@@ -842,7 +892,8 @@ def _array_func(func: Callable) -> Callable[[Callable], Callable]:
 
 
 @_array_func(numpy.take)
-def take(a: Quantity, indices: ArrayLike, axis: Optional[int] = None, out: Optional[Quantity] = None, mode: str = 'raise') -> Tuple[Dimension, Scale]:
+def take(a: Quantity, indices: ArrayLike, axis: Optional[int] = None,
+         out: Optional[Quantity] = None, mode: str = 'raise') -> Tuple[Dimension, Scale]:
     if out is not None:
         return _match_units(numpy.take, a, out, labels={1: "'out'"})
     else:
@@ -855,7 +906,8 @@ def reshape(a: Quantity, newshape: Union[int, Sequence[int]], order: str = 'C') 
 
 
 @_array_func(numpy.choose)
-def choose(a: Array, choices: Sequence[Quantity], out: Optional[Quantity] = None, mode: str = 'raise') -> Tuple[Dimension, Scale]:
+def choose(a: Array, choices: Sequence[Quantity], out: Optional[Quantity] = None,
+           mode: str = 'raise') -> Tuple[Dimension, Scale]:
     if out is not None:
         _ = _match_units(numpy.choose, choices[0], out, labels={1: "'out'"})
     return _match_units(numpy.choose, *choices, argument="choice")
@@ -883,22 +935,26 @@ def transpose(a: Quantity, axes: Optional[Sequence[int]] = None) -> Tuple[Dimens
 
 
 @_array_func(numpy.partition)
-def partition(a: Quantity, kth: Union[int, Sequence[int]], axis: int = -1, kind: str = 'introselect', order: Optional[Union[str, Sequence[str]]] = None) -> Tuple[Dimension, Scale]:
+def partition(a: Quantity, kth: Union[int, Sequence[int]], axis: int = -1, kind: str = 'introselect',
+              order: Optional[Union[str, Sequence[str]]] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.argpartition)
-def argpartition(a: Quantity, kth: Union[int, Sequence[int]], axis: int = -1, kind: str = 'introselect', order: Optional[Union[str, Sequence[str]]] = None) -> None:
+def argpartition(a: Quantity, kth: Union[int, Sequence[int]], axis: int = -1, kind: str = 'introselect',
+                 order: Optional[Union[str, Sequence[str]]] = None) -> None:
     return None
 
 
 @_array_func(numpy.sort)
-def sort(a: Quantity, axis: Optional[int] = -1, kind: Optional[str] = None, order: Optional[Union[str, Sequence[str]]] = None) -> Tuple[Dimension, Scale]:
+def sort(a: Quantity, axis: Optional[int] = -1, kind: Optional[str] = None,
+         order: Optional[Union[str, Sequence[str]]] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.argsort)
-def argsort(a: Quantity, axis: Optional[int] = -1, kind: Optional[str] = None, order: Optional[Union[str, Sequence[str]]] = None) -> None:
+def argsort(a: Quantity, axis: Optional[int] = -1, kind: Optional[str] = None,
+            order: Optional[Union[str, Sequence[str]]] = None) -> None:
     return None
 
 
@@ -913,7 +969,8 @@ def argmin(a: Quantity, axis: Optional[int] = None, out: Optional[Array] = None)
 
 
 @_array_func(numpy.searchsorted)
-def searchsorted(a: Quantity, v: Quantity, side: str = 'left', sorter: Optional[ArrayLike] = None) -> Tuple[Dimension, Scale]:
+def searchsorted(a: Quantity, v: Quantity, side: str = 'left',
+                 sorter: Optional[ArrayLike] = None) -> Tuple[Dimension, Scale]:
     return _match_units(numpy.searchsorted, a, v)
 
 
@@ -933,7 +990,8 @@ def diagonal(a: Quantity, offset: int = 0, axis1: int = 0, axis2: int = 1) -> Tu
 
 
 @_array_func(numpy.trace)
-def trace(a: Quantity, offset: int = 0, axis1: int = 0, axis2: int = 1, dtype: Optional[Dtype] = None, out: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
+def trace(a: Quantity, offset: int = 0, axis1: int = 0, axis2: int = 1,
+          dtype: Optional[Dtype] = None, out: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
     if out is None:
         return a.dimension, a.scale
     else:
@@ -956,7 +1014,8 @@ def shape(a: Quantity) -> None:
 
 
 @_array_func(numpy.compress)
-def compress(condition: Array, a: Quantity, axis: Optional[int] = None, out: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
+def compress(condition: Array, a: Quantity, axis: Optional[int] = None,
+             out: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
     if out is None:
         return a.dimension, a.scale
     else:
@@ -964,7 +1023,8 @@ def compress(condition: Array, a: Quantity, axis: Optional[int] = None, out: Opt
 
 
 @_array_func(numpy.clip)
-def clip(a: Quantity, a_min: Quantity, a_max: Quantity, out: Optional[Quantity] = None, **kwargs: Any) -> Tuple[Dimension, Scale]:
+def clip(a: Quantity, a_min: Quantity, a_max: Quantity,
+         out: Optional[Quantity] = None, **kwargs: Any) -> Tuple[Dimension, Scale]:
     if out is None:
         return _match_units(numpy.clip, a, a_min, a_max)
     else:
@@ -972,7 +1032,9 @@ def clip(a: Quantity, a_min: Quantity, a_max: Quantity, out: Optional[Quantity] 
 
 
 @_array_func(numpy.sum)
-def sum(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, dtype: Optional[Dtype] = None, out: Optional[Quantity] = None, keepdims: Optional[bool] = None, initial: Optional[Quantity] = None, where: Optional[ArrayLike] = None) -> Tuple[Dimension, Scale]:
+def sum(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, dtype: Optional[Dtype] = None,
+        out: Optional[Quantity] = None, keepdims: Optional[bool] = None,
+        initial: Optional[Quantity] = None, where: Optional[ArrayLike] = None) -> Tuple[Dimension, Scale]:
     if out is None:
         if initial is None:
             return a.dimension, a.scale
@@ -986,17 +1048,20 @@ def sum(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, dtype: Op
 
 
 @_array_func(numpy.any)
-def any(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, out: Optional[ArrayLike] = None, keepdims: Optional[bool] = None) -> None:
+def any(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
+        out: Optional[ArrayLike] = None, keepdims: Optional[bool] = None) -> None:
     return None
 
 
 @_array_func(numpy.all)
-def all(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, out: Optional[ArrayLike] = None, keepdims: Optional[bool] = None) -> None:
+def all(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
+        out: Optional[ArrayLike] = None, keepdims: Optional[bool] = None) -> None:
     return None
 
 
 @_array_func(numpy.cumsum)
-def cumsum(a: Quantity, axis: Optional[int] = None, dtype: Optional[Dtype] = None, out: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
+def cumsum(a: Quantity, axis: Optional[int] = None, dtype: Optional[Dtype] = None,
+           out: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
     if out is None:
         return a.dimension, a.scale
     else:
@@ -1004,7 +1069,8 @@ def cumsum(a: Quantity, axis: Optional[int] = None, dtype: Optional[Dtype] = Non
 
 
 @_array_func(numpy.ptp)
-def ptp(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, out: Optional[Quantity] = None, keepdims: Optional[bool] = None) -> Tuple[Dimension, Scale]:
+def ptp(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
+        out: Optional[Quantity] = None, keepdims: Optional[bool] = None) -> Tuple[Dimension, Scale]:
     if out is None:
         return a.dimension, a.scale
     else:
@@ -1012,7 +1078,9 @@ def ptp(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, out: Opti
 
 
 @_array_func(numpy.amax)
-def amax(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, out: Optional[Quantity] = None, keepdims: Optional[bool] = None, initial: Optional[Quantity] = None, where: Optional[ArrayLike] = None) -> Tuple[Dimension, Scale]:
+def amax(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
+         out: Optional[Quantity] = None, keepdims: Optional[bool] = None,
+         initial: Optional[Quantity] = None, where: Optional[ArrayLike] = None) -> Tuple[Dimension, Scale]:
     if out is None:
         if initial is None:
             return a.dimension, a.scale
@@ -1026,7 +1094,9 @@ def amax(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, out: Opt
 
 
 @_array_func(numpy.amin)
-def amin(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, out: Optional[Quantity] = None, keepdims: Optional[bool] = None, initial: Optional[Quantity] = None, where: Optional[ArrayLike] = None) -> Tuple[Dimension, Scale]:
+def amin(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
+         out: Optional[Quantity] = None, keepdims: Optional[bool] = None,
+         initial: Optional[Quantity] = None, where: Optional[ArrayLike] = None) -> Tuple[Dimension, Scale]:
     if out is None:
         if initial is None:
             return a.dimension, a.scale
@@ -1045,7 +1115,9 @@ def alen(a: Quantity) -> None:
 
 
 @_array_func(numpy.prod)
-def prod(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, dtype: Optional[Dtype] = None, out: Optional[Quantity] = None, keepdims: Optional[bool] = None, initial: Optional[Quantity] = None, where: Optional[ArrayLike] = None) -> Tuple[Dimension, Scale]:
+def prod(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, dtype: Optional[Dtype] = None,
+         out: Optional[Quantity] = None, keepdims: Optional[bool] = None,
+         initial: Optional[Quantity] = None, where: Optional[ArrayLike] = None) -> Tuple[Dimension, Scale]:
     if out is None:
         if initial is None:
             return a.dimension, a.scale
@@ -1059,7 +1131,8 @@ def prod(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, dtype: O
 
 
 @_array_func(numpy.cumprod)
-def cumprod(a: Quantity, axis: Optional[int] = None, dtype: Optional[Dtype] = None, out: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
+def cumprod(a: Quantity, axis: Optional[int] = None, dtype: Optional[Dtype] = None,
+            out: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
     if out is None:
         return a.dimension, a.scale
     else:
@@ -1085,7 +1158,9 @@ def around(a: Quantity, decimals: int = 0, out: Optional[Quantity] = None) -> Tu
 
 
 @_array_func(numpy.mean)
-def mean(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, dtype: Optional[Dtype] = None, out: Optional[Quantity] = None, keepdims: Optional[bool] = None) -> Tuple[Dimension, Scale]:
+def mean(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
+         dtype: Optional[Dtype] = None, out: Optional[Quantity] = None,
+         keepdims: Optional[bool] = None) -> Tuple[Dimension, Scale]:
     if out is None:
         return a.dimension, a.scale
     else:
@@ -1093,7 +1168,9 @@ def mean(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, dtype: O
 
 
 @_array_func(numpy.std)
-def std(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, dtype: Optional[Dtype] = None, out: Optional[Quantity] = None, ddof: int = 0, keepdims: Optional[bool] = None) -> Tuple[Dimension, Scale]:
+def std(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
+        dtype: Optional[Dtype] = None, out: Optional[Quantity] = None,
+        ddof: int = 0, keepdims: Optional[bool] = None) -> Tuple[Dimension, Scale]:
     if out is None:
         return a.dimension, a.scale
     else:
@@ -1101,7 +1178,9 @@ def std(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, dtype: Op
 
 
 @_array_func(numpy.var)
-def var(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, dtype: Optional[Dtype] = None, out: Optional[Quantity] = None, ddof: int = 0, keepdims: Optional[bool] = None) -> Tuple[Dimension, Scale]:
+def var(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
+        dtype: Optional[Dtype] = None, out: Optional[Quantity] = None,
+        ddof: int = 0, keepdims: Optional[bool] = None) -> Tuple[Dimension, Scale]:
     if out is None:
         return a.dimension**2, a.scale
     else:
@@ -1118,7 +1197,10 @@ def round(a: Quantity, decimals: int = 0, out: Optional[Quantity] = None) -> Tup
 
 
 @_array_func(numpy.product)
-def product(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, dtype: Optional[Dtype] = None, out: Optional[Quantity] = None, keepdims: Optional[bool] = None, initial: Optional[Quantity] = None, where: Optional[ArrayLike] = None) -> Tuple[Dimension, Scale]:
+def product(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
+            dtype: Optional[Dtype] = None, out: Optional[Quantity] = None,
+            keepdims: Optional[bool] = None, initial: Optional[Quantity] = None,
+            where: Optional[ArrayLike] = None) -> Tuple[Dimension, Scale]:
     if out is None:
         if initial is None:
             return a.dimension, a.scale
@@ -1132,7 +1214,8 @@ def product(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, dtype
 
 
 @_array_func(numpy.cumproduct)
-def cumproduct(a: Quantity, axis: Optional[int] = None, dtype: Optional[Dtype] = None, out: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
+def cumproduct(a: Quantity, axis: Optional[int] = None, dtype: Optional[Dtype] = None,
+               out: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
     if out is None:
         return a.dimension, a.scale
     else:
@@ -1140,17 +1223,21 @@ def cumproduct(a: Quantity, axis: Optional[int] = None, dtype: Optional[Dtype] =
 
 
 @_array_func(numpy.sometrue)
-def sometrue(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, out: Optional[ArrayLike] = None, keepdims: Optional[bool] = None) -> None:
+def sometrue(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
+             out: Optional[ArrayLike] = None, keepdims: Optional[bool] = None) -> None:
     return None
 
 
 @_array_func(numpy.alltrue)
-def alltrue(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, out: Optional[ArrayLike] = None, keepdims: Optional[bool] = None) -> None:
+def alltrue(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
+            out: Optional[ArrayLike] = None, keepdims: Optional[bool] = None) -> None:
     return None
 
 
 @_array_func(numpy.linspace)
-def linspace(start: Quantity, stop: Quantity, num: int = 50, endpoint: bool = True, retstep: bool = False, dtype: Optional[Dtype] = None, axis: int = 0) -> Union[Tuple[Dimension, Scale], List[Tuple[Dimension, Scale]]]:
+def linspace(start: Quantity, stop: Quantity, num: int = 50,
+             endpoint: bool = True, retstep: bool = False, dtype: Optional[Dtype] = None,
+             axis: int = 0) -> Union[Tuple[Dimension, Scale], List[Tuple[Dimension, Scale]]]:
     dimension, scale = _match_units(numpy.linspace, start, stop)
     if retstep:
         return [(dimension, scale), (dimension, scale)]
@@ -1158,7 +1245,9 @@ def linspace(start: Quantity, stop: Quantity, num: int = 50, endpoint: bool = Tr
 
 
 @_array_func(numpy.logspace)
-def logspace(start: Quantity, stop: Quantity, num: int = 50, endpoint: bool = True, retstep: bool = False, dtype: Optional[Dtype] = None, axis: int = 0) -> Union[Tuple[Dimension, Scale], List[Tuple[Dimension, Scale]]]:
+def logspace(start: Quantity, stop: Quantity, num: int = 50,
+             endpoint: bool = True, retstep: bool = False, dtype: Optional[Dtype] = None,
+             axis: int = 0) -> Union[Tuple[Dimension, Scale], List[Tuple[Dimension, Scale]]]:
     dimension, scale = _match_units(numpy.logspace, start, stop)
     if retstep:
         return [(dimension, scale), (dimension, scale)]
@@ -1166,7 +1255,9 @@ def logspace(start: Quantity, stop: Quantity, num: int = 50, endpoint: bool = Tr
 
 
 @_array_func(numpy.geomspace)
-def geomspace(start: Quantity, stop: Quantity, num: int = 50, endpoint: bool = True, retstep: bool = False, dtype: Optional[Dtype] = None, axis: int = 0) -> Union[Tuple[Dimension, Scale], List[Tuple[Dimension, Scale]]]:
+def geomspace(start: Quantity, stop: Quantity, num: int = 50,
+              endpoint: bool = True, retstep: bool = False, dtype: Optional[Dtype] = None,
+              axis: int = 0) -> Union[Tuple[Dimension, Scale], List[Tuple[Dimension, Scale]]]:
     dimension, scale = _match_units(numpy.geomspace, start, stop)
     if retstep:
         return [(dimension, scale), (dimension, scale)]
@@ -1174,7 +1265,8 @@ def geomspace(start: Quantity, stop: Quantity, num: int = 50, endpoint: bool = T
 
 
 @_array_func(numpy.empty_like)
-def empty_like(prototype: Quantity, dtype: Optional[Dtype] = None, order: str = 'K', subok: bool = True, shape: Optional[Union[int, Sequence[int]]] = None) -> Tuple[Dimension, Scale]:
+def empty_like(prototype: Quantity, dtype: Optional[Dtype] = None, order: str = 'K', subok: bool = True,
+               shape: Optional[Union[int, Sequence[int]]] = None) -> Tuple[Dimension, Scale]:
     return prototype.dimension, prototype.scale
 
 
@@ -1225,7 +1317,8 @@ def dot(a: Quantity, b: Quantity, out: Optional[Quantity] = None) -> Tuple[Dimen
     if out is not None:
         if out.dimension != dimension:
             raise ValueError(
-                f"Invalid mass dimension for argument 'out' of {numpy.dot.__name__}: got {out.dimension}, expected {dimension}"
+                f"Invalid mass dimension for argument 'out' of {numpy.dot.__name__}:"
+                f" got {out.dimension}, expected {dimension}"
             )
         if out.dimension != Scalar and out.scale != scale:
             raise ValueError(
@@ -1264,17 +1357,20 @@ def may_share_memory(a: Quantity, b: Quantity, max_work: Optional[int] = None) -
 
 
 @_array_func(numpy.zeros_like)
-def zeros_like(a: Quantity, dtype: Optional[Dtype] = None, order: str = 'K', subok: bool = True, shape: Optional[Union[int, Sequence[int]]] = None) -> Tuple[Dimension, Scale]:
+def zeros_like(a: Quantity, dtype: Optional[Dtype] = None, order: str = 'K', subok: bool = True,
+               shape: Optional[Union[int, Sequence[int]]] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.ones_like)
-def ones_like(a: Quantity, dtype: Optional[Dtype] = None, order: str = 'K', subok: bool = True, shape: Optional[Union[int, Sequence[int]]] = None) -> Tuple[Dimension, Scale]:
+def ones_like(a: Quantity, dtype: Optional[Dtype] = None, order: str = 'K', subok: bool = True,
+              shape: Optional[Union[int, Sequence[int]]] = None) -> Tuple[Dimension, Scale]:
     return Scalar, a.scale
 
 
 @_array_func(numpy.full_like)
-def full_like(a: Quantity, fill_value: Quantity, dtype: Optional[Dtype] = None, order: str = 'K', subok: bool = True, shape: Optional[Union[int, Sequence[int]]] = None) -> Tuple[Dimension, Scale]:
+def full_like(a: Quantity, fill_value: Quantity, dtype: Optional[Dtype] = None, order: str = 'K',
+              subok: bool = True, shape: Optional[Union[int, Sequence[int]]] = None) -> Tuple[Dimension, Scale]:
     return fill_value.dimension, fill_value.scale
 
 
@@ -1309,7 +1405,8 @@ def outer(a: Quantity, b: Quantity, out: Optional[Quantity] = None) -> Tuple[Dim
     if out is not None:
         if out.dimension != dimension:
             raise ValueError(
-                f"Invalid mass dimension for argument 'out' of {numpy.outer.__name__}: got {out.dimension}, expected {dimension}"
+                f"Invalid mass dimension for argument 'out' of {numpy.outer.__name__}:"
+                f" got {out.dimension}, expected {dimension}"
             )
         if out.dimension != Scalar and out.scale != scale:
             raise ValueError(
@@ -1324,7 +1421,8 @@ def tensordot(a: Quantity, b: Quantity, axes: Union[int, ArrayLike] = 2) -> Tupl
 
 
 @_array_func(numpy.roll)
-def roll(a: Quantity, shift: Union[int, Sequence[int]], axis: Optional[Union[int, Sequence[int]]] = None) -> Tuple[Dimension, Scale]:
+def roll(a: Quantity, shift: Union[int, Sequence[int]],
+         axis: Optional[Union[int, Sequence[int]]] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
@@ -1334,17 +1432,20 @@ def rollaxis(a: Quantity, axis: int, start: int = 0) -> Tuple[Dimension, Scale]:
 
 
 @_array_func(numpy.moveaxis)
-def moveaxis(a: Quantity, source: Union[int, Sequence[int]], destination: Union[int, Sequence[int]]) -> Tuple[Dimension, Scale]:
+def moveaxis(a: Quantity, source: Union[int, Sequence[int]],
+             destination: Union[int, Sequence[int]]) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.cross)
-def cross(a: Quantity, b: Quantity, axisa: int = -1, axisb: int = -1, axisx: int = -1, axis: Optional[int] = None) -> Tuple[Dimension, Scale]:
+def cross(a: Quantity, b: Quantity, axisa: int = -1, axisb: int = -1,
+          axisx: int = -1, axis: Optional[int] = None) -> Tuple[Dimension, Scale]:
     return _multiply_units(numpy.cross, a, b)
 
 
 @_array_func(numpy.allclose)
-def allclose(a: Quantity, b: Quantity, rtol: Optional[Quantity] = None, atol: Optional[Quantity] = None, equal_nan: bool = False) -> None:
+def allclose(a: Quantity, b: Quantity, rtol: Optional[Quantity] = None,
+             atol: Optional[Quantity] = None, equal_nan: bool = False) -> None:
     if rtol is not None:
         _ = _scalar_units(numpy.allclose, rtol, labels={0: "'rtol'"})
     if atol is not None:
@@ -1355,7 +1456,8 @@ def allclose(a: Quantity, b: Quantity, rtol: Optional[Quantity] = None, atol: Op
 
 
 @_array_func(numpy.isclose)
-def isclose(a: Quantity, b: Quantity, rtol: Optional[Quantity] = None, atol: Optional[Quantity] = None, equal_nan: bool = False) -> None:
+def isclose(a: Quantity, b: Quantity, rtol: Optional[Quantity] = None,
+            atol: Optional[Quantity] = None, equal_nan: bool = False) -> None:
     if rtol is not None:
         _ = _scalar_units(numpy.isclose, rtol, labels={0: "'rtol'"})
     if atol is not None:
@@ -1421,7 +1523,8 @@ def flip(m: Quantity, axis: Optional[Union[int, Sequence[int]]] = None) -> Tuple
 
 
 @_array_func(numpy.average)
-def average(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, weights: Optional[Quantity] = None, returned: bool = False) -> List[Tuple[Dimension, Scale]]:
+def average(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
+            weights: Optional[Quantity] = None, returned: bool = False) -> List[Tuple[Dimension, Scale]]:
     if returned:
         if weights is None:
             return [
@@ -1438,7 +1541,8 @@ def average(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, weigh
 
 # TODO: Consider performance
 @_array_func(numpy.piecewise)
-def piecewise(x: Quantity, condlist: Sequence[Union[bool, Array]], funclist: Sequence[Callable], *args: Any, **kw: Any) -> Tuple[Dimension, Scale]:
+def piecewise(x: Quantity, condlist: Sequence[Union[bool, Array]],
+              funclist: Sequence[Callable], *args: Any, **kw: Any) -> Tuple[Dimension, Scale]:
     mapped = (
         func(x[nonzero[0]], *args, **kw)
         for nonzero, func in zip(
@@ -1451,7 +1555,8 @@ def piecewise(x: Quantity, condlist: Sequence[Union[bool, Array]], funclist: Seq
 
 
 @_array_func(numpy.select)
-def select(condlist: Sequence[Array], choicelist: Sequence[Quantity], default: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
+def select(condlist: Sequence[Array], choicelist: Sequence[Quantity],
+           default: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
     if default is not None:
         _ = _match_units(numpy.select, choicelist[0], default, labels={1: "'default'"})
     return _match_units(numpy.select, *choicelist, argument="choice")
@@ -1463,7 +1568,8 @@ def copy(a: Quantity, order: str = 'K', subok: bool = False) -> Tuple[Dimension,
 
 
 @_array_func(numpy.gradient)
-def gradient(f: Quantity, *varargs: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, edge_order: int = 1) -> List[Tuple[Dimension, Scale]]:
+def gradient(f: Quantity, *varargs: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
+             edge_order: int = 1) -> List[Tuple[Dimension, Scale]]:
     shape = numpy.shape(f.value)
     N = len(shape)
     if len(varargs) == 0:
@@ -1475,7 +1581,8 @@ def gradient(f: Quantity, *varargs: Quantity, axis: Optional[Union[int, Sequence
 
 
 @_array_func(numpy.diff)
-def diff(a: Quantity, n: int = 1, axis: int = -1, prepend: Optional[Quantity] = None, append: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
+def diff(a: Quantity, n: int = 1, axis: int = -1, prepend: Optional[Quantity] = None,
+         append: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
     if prepend is None:
         if append is None:
             return a.dimension, a.scale
@@ -1489,7 +1596,8 @@ def diff(a: Quantity, n: int = 1, axis: int = -1, prepend: Optional[Quantity] = 
 
 
 @_array_func(numpy.interp)
-def interp(x: Quantity, xp: Quantity, fp: Quantity, left: Optional[Quantity] = None, right: Optional[Quantity] = None, period: Optional[float] = None) -> Tuple[Dimension, Scale]:
+def interp(x: Quantity, xp: Quantity, fp: Quantity, left: Optional[Quantity] = None,
+           right: Optional[Quantity] = None, period: Optional[float] = None) -> Tuple[Dimension, Scale]:
     _ = _match_units(numpy.interp, x, xp)
     if left is None:
         if right is None:
@@ -1534,7 +1642,9 @@ def place(arr: Quantity, mask: ArrayLike, vals: Quantity) -> None:
 
 
 @_array_func(numpy.cov)
-def cov(m: Quantity, y: Optional[Quantity] = None, rowvar: bool = True, bias: bool = False, ddof: Optional[int] = None, fweights: Optional[Quantity] = None, aweights: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
+def cov(m: Quantity, y: Optional[Quantity] = None, rowvar: bool = True, bias: bool = False,
+        ddof: Optional[int] = None, fweights: Optional[Quantity] = None,
+        aweights: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
     if y is not None:
         _ = _match_units(numpy.cov, m, y)
     if fweights is not None:
@@ -1567,14 +1677,17 @@ def msort(a: Quantity) -> Tuple[Dimension, Scale]:
 
 
 @_array_func(numpy.median)
-def median(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, out: Optional[Quantity] = None, overwrite_input: bool = False, keepdims: bool = False) -> Tuple[Dimension, Scale]:
+def median(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, out: Optional[Quantity] = None,
+           overwrite_input: bool = False, keepdims: bool = False) -> Tuple[Dimension, Scale]:
     if out is not None:
         return _match_units(numpy.median, a, out, labels={1: "'out'"})
     return a.dimension, a.scale
 
 
 @_array_func(numpy.percentile)
-def percentile(a: Quantity, q: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, out: Optional[Quantity] = None, overwrite_input: bool = False, interpolation: str = 'linear', keepdims: bool = False) -> Tuple[Dimension, Scale]:
+def percentile(a: Quantity, q: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
+               out: Optional[Quantity] = None, overwrite_input: bool = False,
+               interpolation: str = 'linear', keepdims: bool = False) -> Tuple[Dimension, Scale]:
     _ = _scalar_units(numpy.percentile, q, offset=1)
     if out is not None:
         return _match_units(numpy.percentile, a, out, labels={1: "'out'"})
@@ -1582,7 +1695,9 @@ def percentile(a: Quantity, q: Quantity, axis: Optional[Union[int, Sequence[int]
 
 
 @_array_func(numpy.quantile)
-def quantile(a: Quantity, q: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, out: Optional[Quantity] = None, overwrite_input: bool = False, interpolation: str = 'linear', keepdims: bool = False) -> Tuple[Dimension, Scale]:
+def quantile(a: Quantity, q: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
+             out: Optional[Quantity] = None, overwrite_input: bool = False,
+             interpolation: str = 'linear', keepdims: bool = False) -> Tuple[Dimension, Scale]:
     _ = _scalar_units(numpy.quantile, q, offset=1)
     if out is not None:
         return _match_units(numpy.quantile, a, out, labels={1: "'out'"})
@@ -1590,7 +1705,8 @@ def quantile(a: Quantity, q: Quantity, axis: Optional[Union[int, Sequence[int]]]
 
 
 @_array_func(numpy.trapz)
-def trapz(y: Quantity, x: Optional[Quantity] = None, dx: Optional[Quantity] = None, axis: int = -1) -> Tuple[Dimension, Scale]:
+def trapz(y: Quantity, x: Optional[Quantity] = None, dx: Optional[Quantity] = None,
+          axis: int = -1) -> Tuple[Dimension, Scale]:
     if x is not None:
         return _multiply_units(numpy.trapz, y, x)
     if dx is not None:
@@ -1599,17 +1715,20 @@ def trapz(y: Quantity, x: Optional[Quantity] = None, dx: Optional[Quantity] = No
 
 
 @_array_func(numpy.meshgrid)
-def meshgrid(*xi: Quantity, copy: bool = True, sparse: bool = False, indexing: str = 'xy') -> List[Tuple[Dimension, Scale]]:
+def meshgrid(*xi: Quantity, copy: bool = True, sparse: bool = False,
+             indexing: str = 'xy') -> List[Tuple[Dimension, Scale]]:
     return [(x.quantity, x.scale) for x in xi]
 
 
 @_array_func(numpy.delete)
-def delete(arr: Quantity, obj: Union[slice, int, Sequence[int]], axis: Optional[int] = None) -> Tuple[Dimension, Scale]:
+def delete(arr: Quantity, obj: Union[slice, int, Sequence[int]],
+           axis: Optional[int] = None) -> Tuple[Dimension, Scale]:
     return arr.dimension, arr.scale
 
 
 @_array_func(numpy.insert)
-def insert(arr: Quantity, obj: Union[slice, int, Sequence[int]], values: Quantity, axis: Optional[int] = None) -> Tuple[Dimension, Scale]:
+def insert(arr: Quantity, obj: Union[slice, int, Sequence[int]],
+           values: Quantity, axis: Optional[int] = None) -> Tuple[Dimension, Scale]:
     return _match_units(numpy.insert, arr, values, offset=1)
 
 
@@ -1645,7 +1764,8 @@ def put_along_axis(arr: Quantity, indices: Array, values: Quantity, axis: int) -
 
 
 @_array_func(numpy.apply_along_axis)
-def apply_along_axis(func1d: Callable, axis: int, arr: Quantity, *args: Any, **kwargs: Any) -> Tuple[Dimension, Scale]:
+def apply_along_axis(func1d: Callable, axis: int, arr: Quantity,
+                     *args: Any, **kwargs: Any) -> Tuple[Dimension, Scale]:
     return _match_units(numpy.apply_along_axis, func1d(arr[0], *args, **kwargs))
 
 
@@ -1668,7 +1788,8 @@ def dstack(tup: Sequence[Quantity]) -> Tuple[Dimension, Scale]:
 
 
 @_array_func(numpy.array_split)
-def array_split(ary: Quantity, indices_or_sections: Union[int, ArrayLike], axis: int = 0) -> List[Tuple[Dimension, Scale]]:
+def array_split(ary: Quantity, indices_or_sections: Union[int, ArrayLike],
+                axis: int = 0) -> List[Tuple[Dimension, Scale]]:
     try:
         N = len(cast(Sized, indices_or_sections)) + 1
     except TypeError:
@@ -1677,7 +1798,8 @@ def array_split(ary: Quantity, indices_or_sections: Union[int, ArrayLike], axis:
 
 
 @_array_func(numpy.split)
-def split(ary: Quantity, indices_or_sections: Union[int, ArrayLike], axis: int = 0) -> List[Tuple[Dimension, Scale]]:
+def split(ary: Quantity, indices_or_sections: Union[int, ArrayLike],
+          axis: int = 0) -> List[Tuple[Dimension, Scale]]:
     try:
         N = len(cast(Sized, indices_or_sections)) + 1
     except TypeError:
@@ -1723,7 +1845,8 @@ def tile(A: Quantity, reps: ArrayLike) -> Tuple[Dimension, Scale]:
 
 
 @_array_func(numpy.ediff1d)
-def ediff1d(ary: Quantity, to_end: Optional[Quantity] = None, to_begin: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
+def ediff1d(ary: Quantity, to_end: Optional[Quantity] = None,
+            to_begin: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
     if to_end is None:
         if to_begin is None:
             return ary.dimension, ary.scale
@@ -1738,12 +1861,13 @@ def ediff1d(ary: Quantity, to_end: Optional[Quantity] = None, to_begin: Optional
 
 @_array_func(numpy.unique)
 def unique(ar: Quantity, return_index: bool = False, return_inverse: bool = False,
-        return_counts: bool = False, axis: Optional[int] = None) -> Tuple[Dimension, Scale]:
+           return_counts: bool = False, axis: Optional[int] = None) -> Tuple[Dimension, Scale]:
     return ar.dimension, ar.scale
 
 
 @_array_func(numpy.intersect1d)
-def intersect1d(ar1: Quantity, ar2: Quantity, assume_unique: bool = False, return_indices: bool = False) -> List[Optional[Tuple[Dimension, Scale]]]:
+def intersect1d(ar1: Quantity, ar2: Quantity, assume_unique: bool = False,
+                return_indices: bool = False) -> List[Optional[Tuple[Dimension, Scale]]]:
     if return_indices:
         return [_match_units(numpy.intersect1d, ar1, ar2), None, None]
     else:
@@ -1835,7 +1959,8 @@ def isrealobj(x: Quantity) -> None:
 
 
 @_array_func(numpy.nan_to_num)
-def nan_to_num(val: Quantity, copy: bool = True, nan: Optional[Quantity] = None, posinf: Optional[Quantity] = None, neginf: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
+def nan_to_num(val: Quantity, copy: bool = True, nan: Optional[Quantity] = None,
+               posinf: Optional[Quantity] = None, neginf: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
     args = (nan, posinf, neginf)
     labels = ("'nan'", "'posinf'", "'neginf'")
     return _match_units(
@@ -1861,7 +1986,8 @@ def common_type(*arrays: Quantity) -> None:
 
 
 @_array_func(numpy.nanmin)
-def nanmin(a: Quantity, axis: Optional[int] = None, out: Optional[Quantity] = None, keepdims: Optional[bool] = None) -> Tuple[Dimension, Scale]:
+def nanmin(a: Quantity, axis: Optional[int] = None, out: Optional[Quantity] = None,
+           keepdims: Optional[bool] = None) -> Tuple[Dimension, Scale]:
     if out is None:
         return a.dimension, a.scale
     else:
@@ -1869,7 +1995,8 @@ def nanmin(a: Quantity, axis: Optional[int] = None, out: Optional[Quantity] = No
 
 
 @_array_func(numpy.nanmax)
-def nanmax(a: Quantity, axis: Optional[int] = None, out: Optional[Quantity] = None, keepdims: Optional[bool] = None) -> Tuple[Dimension, Scale]:
+def nanmax(a: Quantity, axis: Optional[int] = None, out: Optional[Quantity] = None,
+           keepdims: Optional[bool] = None) -> Tuple[Dimension, Scale]:
     if out is None:
         return a.dimension, a.scale
     else:
@@ -1887,7 +2014,8 @@ def nanargmax(a: Quantity, axis: Optional[int] = None) -> None:
 
 
 @_array_func(numpy.nansum)
-def nansum(a: Quantity, axis: Optional[int] = None, dtype: Optional[Dtype] = None, out: Optional[Quantity] = None, keepdims: Optional[bool] = None) -> Tuple[Dimension, Scale]:
+def nansum(a: Quantity, axis: Optional[int] = None, dtype: Optional[Dtype] = None,
+           out: Optional[Quantity] = None, keepdims: Optional[bool] = None) -> Tuple[Dimension, Scale]:
     if out is None:
         return a.dimension, a.scale
     else:
@@ -1895,7 +2023,8 @@ def nansum(a: Quantity, axis: Optional[int] = None, dtype: Optional[Dtype] = Non
 
 
 @_array_func(numpy.nanprod)
-def nanprod(a: Quantity, axis: Optional[int] = None, dtype: Optional[Dtype] = None, out: Optional[Quantity] = None, keepdims: Optional[bool] = None) -> Tuple[Dimension, Scale]:
+def nanprod(a: Quantity, axis: Optional[int] = None, dtype: Optional[Dtype] = None,
+            out: Optional[Quantity] = None, keepdims: Optional[bool] = None) -> Tuple[Dimension, Scale]:
     if out is None:
         return a.dimension, a.scale
     else:
@@ -1903,7 +2032,8 @@ def nanprod(a: Quantity, axis: Optional[int] = None, dtype: Optional[Dtype] = No
 
 
 @_array_func(numpy.nancumsum)
-def nancumsum(a: Quantity, axis: Optional[int] = None, dtype: Optional[Dtype] = None, out: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
+def nancumsum(a: Quantity, axis: Optional[int] = None, dtype: Optional[Dtype] = None,
+              out: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
     if out is None:
         return a.dimension, a.scale
     else:
@@ -1911,7 +2041,8 @@ def nancumsum(a: Quantity, axis: Optional[int] = None, dtype: Optional[Dtype] = 
 
 
 @_array_func(numpy.nancumprod)
-def nancumprod(a: Quantity, axis: Optional[int] = None, dtype: Optional[Dtype] = None, out: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
+def nancumprod(a: Quantity, axis: Optional[int] = None, dtype: Optional[Dtype] = None,
+               out: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
     if out is None:
         return a.dimension, a.scale
     else:
@@ -1919,7 +2050,8 @@ def nancumprod(a: Quantity, axis: Optional[int] = None, dtype: Optional[Dtype] =
 
 
 @_array_func(numpy.nanmean)
-def nanmean(a: Quantity, axis: Optional[int] = None, dtype: Optional[Dtype] = None, out: Optional[Quantity] = None, keepdims: Any = None) -> Tuple[Dimension, Scale]:
+def nanmean(a: Quantity, axis: Optional[int] = None, dtype: Optional[Dtype] = None,
+            out: Optional[Quantity] = None, keepdims: Any = None) -> Tuple[Dimension, Scale]:
     if out is None:
         return a.dimension, a.scale
     else:
@@ -1927,7 +2059,8 @@ def nanmean(a: Quantity, axis: Optional[int] = None, dtype: Optional[Dtype] = No
 
 
 @_array_func(numpy.nanmedian)
-def nanmedian(a: Quantity, axis: Optional[int] = None, out: Optional[Quantity] = None, overwrie_input: bool = False, keepdims: Optional[bool] = None) -> Tuple[Dimension, Scale]:
+def nanmedian(a: Quantity, axis: Optional[int] = None, out: Optional[Quantity] = None,
+              overwrie_input: bool = False, keepdims: Optional[bool] = None) -> Tuple[Dimension, Scale]:
     if out is None:
         return a.dimension, a.scale
     else:
@@ -1935,8 +2068,9 @@ def nanmedian(a: Quantity, axis: Optional[int] = None, out: Optional[Quantity] =
 
 
 @_array_func(numpy.nanpercentile)
-def nanpercentile(a: Quantity, q: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, out: Optional[Quantity] = None, overwrite_input: bool = False,
-        interpolation: str = 'linear', keepdims: Optional[bool] = None) -> Tuple[Dimension, Scale]:
+def nanpercentile(a: Quantity, q: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
+                  out: Optional[Quantity] = None, overwrite_input: bool = False,
+                  interpolation: str = 'linear', keepdims: Optional[bool] = None) -> Tuple[Dimension, Scale]:
     _ = _scalar_units(numpy.nanpercentile, q, offset=1)
     if out is not None:
         return _match_units(numpy.nanpercentile, a, out, labels={1: "'out'"})
@@ -1944,8 +2078,9 @@ def nanpercentile(a: Quantity, q: Quantity, axis: Optional[Union[int, Sequence[i
 
 
 @_array_func(numpy.nanquantile)
-def nanquantile(a: Quantity, q: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, out: Optional[Quantity] = None, overwrite_input: bool = False,
-        interpolation: str = 'linear', keepdims: Optional[bool] = None) -> Tuple[Dimension, Scale]:
+def nanquantile(a: Quantity, q: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
+                out: Optional[Quantity] = None, overwrite_input: bool = False,
+                interpolation: str = 'linear', keepdims: Optional[bool] = None) -> Tuple[Dimension, Scale]:
     _ = _scalar_units(numpy.nanquantile, q, offset=1)
     if out is not None:
         return _match_units(numpy.nanquantile, a, out, labels={1: "'out'"})
@@ -1953,7 +2088,9 @@ def nanquantile(a: Quantity, q: Quantity, axis: Optional[Union[int, Sequence[int
 
 
 @_array_func(numpy.nanvar)
-def nanvar(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, dtype: Optional[Dtype] = None, out: Optional[Quantity] = None, ddof: int = 0, keepdims: Optional[bool] = None) -> Tuple[Dimension, Scale]:
+def nanvar(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
+           dtype: Optional[Dtype] = None, out: Optional[Quantity] = None,
+           ddof: int = 0, keepdims: Optional[bool] = None) -> Tuple[Dimension, Scale]:
     if out is None:
         return a.dimension**2, a.scale
     else:
@@ -1962,7 +2099,9 @@ def nanvar(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, dtype:
 
 
 @_array_func(numpy.nanstd)
-def nanstd(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, dtype: Optional[Dtype] = None, out: Optional[Quantity] = None, ddof: int = 0, keepdims: Optional[bool] = None) -> Tuple[Dimension, Scale]:
+def nanstd(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
+           dtype: Optional[Dtype] = None, out: Optional[Quantity] = None,
+           ddof: int = 0, keepdims: Optional[bool] = None) -> Tuple[Dimension, Scale]:
     if out is None:
         return a.dimension, a.scale
     else:
@@ -1970,7 +2109,10 @@ def nanstd(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, dtype:
 
 
 @_array_func(numpy.pad)
-def pad(array: Quantity, pad_width: Union[int, Sequence[int], ArrayLike], mode: Union[str, Callable] = 'constant', stat_length: Optional[Union[int, Sequence[int]]] = None, constant_values: Optional[Quantity] = None, end_values: Optional[Quantity] = None, reflect_type: Optional[str] = None) -> Tuple[Dimension, Scale]:
+def pad(array: Quantity, pad_width: Union[int, Sequence[int], ArrayLike],
+        mode: Union[str, Callable] = 'constant', stat_length: Optional[Union[int, Sequence[int]]] = None,
+        constant_values: Optional[Quantity] = None, end_values: Optional[Quantity] = None,
+        reflect_type: Optional[str] = None) -> Tuple[Dimension, Scale]:
     args: Tuple[Quantity, ...] = ()
     labels: Tuple[str, ...] = ()
     if constant_values is not None:
@@ -2047,7 +2189,8 @@ def eigh(a: Quantity, UPLO: str = 'L') -> List[Optional[Tuple[Dimension, Scale]]
 
 
 @_array_func(numpy.linalg.svd)
-def svd(a: Quantity, full_matrices: bool = True, compute_uv: bool = True, hermitian: bool = False) -> List[Tuple[Dimension, Scale]]:
+def svd(a: Quantity, full_matrices: bool = True, compute_uv: bool = True,
+        hermitian: bool = False) -> List[Tuple[Dimension, Scale]]:
     return [(Scalar, a.scale), (a.dimension, a.scale), (Scalar, a.scale)]
 
 
@@ -2094,7 +2237,9 @@ def lstsq(a: Quantity, b: Quantity, rcond: Optional[Quantity] = None) -> List[Op
 
 
 @_array_func(numpy.linalg.norm)
-def norm(x: Quantity, ord: Optional[Union[int, str]] = None, axis: Optional[Union[int, Tuple[int, int]]] = None, keepdims: bool = False) -> Tuple[Dimension, Scale]:
+def norm(x: Quantity, ord: Optional[Union[int, str]] = None,
+         axis: Optional[Union[int, Tuple[int, int]]] = None,
+         keepdims: bool = False) -> Tuple[Dimension, Scale]:
     return x.dimension, x.scale
 
 
@@ -2114,72 +2259,86 @@ def ifftshift(x: Quantity, axes: Optional[Union[int, Sequence[int]]] = None) -> 
 
 
 @_array_func(numpy.fft.fft)
-def fft(a: Quantity, n: Optional[int] = None, axis: int = -1, norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
+def fft(a: Quantity, n: Optional[int] = None, axis: int = -1,
+        norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.fft.ifft)
-def ifft(a: Quantity, n: Optional[int] = None, axis: int = -1, norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
+def ifft(a: Quantity, n: Optional[int] = None, axis: int = -1,
+         norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.fft.rfft)
-def rfft(a: Quantity, n: Optional[int] = None, axis: int = -1, norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
+def rfft(a: Quantity, n: Optional[int] = None, axis: int = -1,
+         norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.fft.irfft)
-def irfft(a: Quantity, n: Optional[int] = None, axis: int = -1, norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
+def irfft(a: Quantity, n: Optional[int] = None, axis: int = -1,
+          norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.fft.hfft)
-def hfft(a: Quantity, n: Optional[int] = None, axis: int = -1, norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
+def hfft(a: Quantity, n: Optional[int] = None, axis: int = -1,
+         norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.fft.ihfft)
-def ihfft(a: Quantity, n: Optional[int] = None, axis: int = -1, norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
+def ihfft(a: Quantity, n: Optional[int] = None, axis: int = -1,
+          norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.fft.fftn)
-def fftn(a: Quantity, s: Optional[Sequence[int]] = None, axes: Optional[Sequence[int]] = None, norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
+def fftn(a: Quantity, s: Optional[Sequence[int]] = None, axes: Optional[Sequence[int]] = None,
+         norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.fft.ifftn)
-def ifftn(a: Quantity, s: Optional[Sequence[int]] = None, axes: Optional[Sequence[int]] = None, norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
+def ifftn(a: Quantity, s: Optional[Sequence[int]] = None, axes: Optional[Sequence[int]] = None,
+          norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.fft.fft2)
-def fft2(a: Quantity, s: Optional[Sequence[int]] = None, axes: Sequence[int] = (-2, -1), norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
+def fft2(a: Quantity, s: Optional[Sequence[int]] = None, axes: Sequence[int] = (-2, -1),
+         norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.fft.ifft2)
-def ifft2(a: Quantity, s: Optional[Sequence[int]] = None, axes: Sequence[int] = (-2, -1), norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
+def ifft2(a: Quantity, s: Optional[Sequence[int]] = None, axes: Sequence[int] = (-2, -1),
+          norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.fft.rfftn)
-def rfftn(a: Quantity, s: Optional[Sequence[int]] = None, axes: Optional[Sequence[int]] = None, norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
+def rfftn(a: Quantity, s: Optional[Sequence[int]] = None, axes: Optional[Sequence[int]] = None,
+          norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.fft.irfftn)
-def irfftn(a: Quantity, s: Optional[Sequence[int]] = None, axes: Optional[Sequence[int]] = None, norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
+def irfftn(a: Quantity, s: Optional[Sequence[int]] = None, axes: Optional[Sequence[int]] = None,
+           norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.fft.rfft2)
-def rfft2(a: Quantity, s: Optional[Sequence[int]] = None, axes: Sequence[int] = (-2, -1), norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
+def rfft2(a: Quantity, s: Optional[Sequence[int]] = None, axes: Sequence[int] = (-2, -1),
+          norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
 @_array_func(numpy.fft.irfft2)
-def irfft2(a: Quantity, s: Optional[Sequence[int]] = None, axes: Sequence[int] = (-2, -1), norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
+def irfft2(a: Quantity, s: Optional[Sequence[int]] = None, axes: Sequence[int] = (-2, -1),
+           norm: Optional[str] = None) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
@@ -2200,26 +2359,30 @@ def diag_indices_from(arr: Quantity) -> None:
 
 
 @_array_func(numpy.save)
-def save(file: Union[BinaryIO, str, Path], arr: Quantity, allow_pickle: bool = True, fix_imports: bool = True) -> None:
+def save(file: Union[BinaryIO, str, Path], arr: Quantity,
+         allow_pickle: bool = True, fix_imports: bool = True) -> None:
     _ = _scalar_units(numpy.save, arr)
     return None
 
 
 @_array_func(numpy.savez)
 def savez(file: Union[BinaryIO, str, Path], *args: Quantity, **kwds: Quantity) -> None:
-    _ = _scalar_units(numpy.savez, *args, *kwds.values(), labels={len(args) + i: f"'{key}'" for i, key in enumerate(kwds.keys())})
+    _ = _scalar_units(numpy.savez, *args, *kwds.values(),
+                      labels={len(args) + i: f"'{key}'" for i, key in enumerate(kwds.keys())})
     return None
 
 
 @_array_func(numpy.savez_compressed)
 def savez_compressed(file: Union[BinaryIO, str, Path], *args: Quantity, **kwds: Quantity) -> None:
-    _ = _scalar_units(numpy.savez_compressed, *args, *kwds.values(), labels={len(args) + i: f"'{key}'" for i, key in enumerate(kwds.keys())})
+    _ = _scalar_units(numpy.savez_compressed, *args, *kwds.values(),
+                      labels={len(args) + i: f"'{key}'" for i, key in enumerate(kwds.keys())})
     return None
 
 
 @_array_func(numpy.savetxt)
-def savetxt(fname: Union[TextIO, str, Path], X: Quantity, fmt: Union[str, Sequence[str]] = '%.18e', delimiter: str = ' ', newline: str = '\n', header: str = '',
-        footer: str = '', comments: str = '# ', encoding: Optional[str] = None) -> None:
+def savetxt(fname: Union[TextIO, str, Path], X: Quantity, fmt: Union[str, Sequence[str]] = '%.18e',
+            delimiter: str = ' ', newline: str = '\n', header: str = '',
+            footer: str = '', comments: str = '# ', encoding: Optional[str] = None) -> None:
     _ = _scalar_units(numpy.savetxt, X)
     return None
 
@@ -2248,10 +2411,11 @@ def polyder(p: Quantity, m: int = 1) -> Tuple[Dimension, Scale]:
 
 @_array_func(numpy.polyfit)
 def polyfit(x: Quantity, y: Quantity, deg: int, rcond: Optional[float] = None,
-            full: bool = False, w: Optional[Quantity] = None, cov: Union[bool, str] = False) -> Tuple[Dimension, Scale]:
+            full: bool = False, w: Optional[Quantity] = None,
+            cov: Union[bool, str] = False) -> Tuple[Dimension, Scale]:
     _ = _scalar_units(numpy.polyfit, x)
     if w is not None:
-        prod = _mul_units(numpy.polyfit, y, w, labels={1: "w"})
+        prod = _multiply_units(numpy.polyfit, y, w, labels={1: "w"})
     else:
         prod = (y.dimension, y.scale)
     if full:
@@ -2280,12 +2444,12 @@ def polysub(a1: Quantity, a2: Quantity) -> Tuple[Dimension, Scale]:
 
 @_array_func(numpy.polymul)
 def polymul(a1: Quantity, a2: Quantity) -> Tuple[Dimension, Scale]:
-    return _mul_units(numpy.polymul, a1, a2)
+    return _multiply_units(numpy.polymul, a1, a2)
 
 
 @_array_func(numpy.polydiv)
 def polydiv(a1: Quantity, a2: Quantity) -> Tuple[Dimension, Scale]:
-    return _div_units(numpy.polydiv, a1, a2)
+    return _divide_units(numpy.polydiv, a1, a2)
 
 
 # Special handling for block method due to nested sequences
