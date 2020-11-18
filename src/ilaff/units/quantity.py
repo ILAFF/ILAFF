@@ -827,7 +827,7 @@ def _array_func(func: Callable) -> Callable[[Callable], Callable]:
                 return result
             if type(output) is tuple:
                 return Quantity(result, *output)
-            if type(result) is tuple:
+            if type(result) is tuple or type(result) is list:
                 if len(output) == len(result):
                     return tuple(r if o is None else Quantity(r, *o) for r, o in zip(result, output))
             else:
@@ -1464,12 +1464,14 @@ def copy(a: Quantity, order: str = 'K', subok: bool = False) -> Tuple[Dimension,
 
 @_array_func(numpy.gradient)
 def gradient(f: Quantity, *varargs: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, edge_order: int = 1) -> List[Tuple[Dimension, Scale]]:
-    if len(varargs) == 1:
-        shape = numpy.shape(f.value)
-        N = len(shape)
-        return [_divide_units(numpy.gradient, f, varargs[0], labels={1: "spacing"})] * N
+    shape = numpy.shape(f.value)
+    N = len(shape)
+    if len(varargs) == 0:
+        return [(f.dimension, f.scale)] * N
+    elif len(varargs) == 1:
+        return [_divide_units(numpy.gradient, f, varargs[0])] * N
     else:
-        return [_divide_units(numpy.gradient, f, arg, labels={1: "spacing"}) for arg in varargs]
+        return [_divide_units(numpy.gradient, f, arg, offset=i) for i, arg in enumerate(varargs)]
 
 
 @_array_func(numpy.diff)
