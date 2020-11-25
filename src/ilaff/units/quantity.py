@@ -136,7 +136,7 @@ _arrayfuncs: MutableMapping[Callable, Callable] = {}
 
 def _delegate_to(delegate: Any) -> Callable[[Callable], Callable]:
     def decorator(method: Callable) -> Callable:
-        return getattr(delegate, method.__name__)
+        return getattr(delegate, method.__name__)  # type: ignore
     return decorator
 
 
@@ -329,14 +329,14 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin):
     @property
     def shape(self) -> Tuple[int, ...]:
         try:
-            return self.value.shape
+            return self.value.shape  # type: ignore
         except AttributeError:
             return ()
 
     @property
     def ndim(self) -> int:
         try:
-            return self.value.ndim
+            return self.value.ndim  # type: ignore
         except AttributeError:
             return 0
 
@@ -375,11 +375,11 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin):
 
     @property
     def itemsize(self) -> int:
-        return self.value.itemsize
+        return self.value.itemsize  # type: ignore
 
     @property
     def nbytes(self) -> int:
-        return self.value.nbytes
+        return self.value.nbytes  # type: ignore
 
     @property
     def real(self) -> "Quantity":
@@ -391,11 +391,11 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin):
 
     @property
     def size(self) -> int:
-        return self.value.size
+        return self.value.size  # type: ignore
 
     @property
     def strides(self) -> Tuple[int]:
-        return self.value.strides
+        return self.value.strides  # type: ignore
 
     @_delegate_to(numpy)
     def any(self, axis: Optional[int] = None, out: Optional[numpy.ndarray] = None,
@@ -490,24 +490,24 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin):
         )
 
     @overload
-    def itemset(self, value: "Quantity") -> None: ...
+    def itemset(self, arg1: Any) -> None: ...
 
     @overload
-    def itemset(self, idx: Union[int, Tuple[int, ...]], value: "Quantity") -> None: ...
+    def itemset(self, arg1: Union[int, Tuple[int, ...]], arg2: Any) -> None: ...
 
-    def itemset(self, *args) -> None:
-        if len(args) > 1:
-            val = args[1]
+    def itemset(self, arg1: Any, arg2: Any = None) -> None:
+        if arg2 is not None:
+            val = arg2
             if not isinstance(val, Quantity):
                 val = Quantity(val, Scalar, self.scale)
-            _ = _match_units(self.itemset, self, args[1])
-            self.value.itemset(args[0], val.value)
+            _ = _match_units(self.itemset, self, arg2)
+            self.value.itemset(arg1, val.value)
         else:
-            val = args[0]
+            val = arg1
             if not isinstance(val, Quantity):
                 val = Quantity(val, Scalar, self.scale)
-            _ = _match_units(self.itemset, self, args[0], offset=-1)
-            self.value.itemset(args[0].value)
+            _ = _match_units(self.itemset, self, arg1, offset=-1)
+            self.value.itemset(arg1.value)
 
     @_delegate_as(numpy.amax)
     def max(self, axis: Optional[Union[int, Sequence[int]]] = None,
@@ -517,7 +517,7 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin):
     @_delegate_to(numpy)
     def mean(self, axis: Optional[Union[int, Sequence[int]]] = None, dtype: Optional[Dtype] = None,
              out: Optional["Quantity"] = None, keepdims: Optional[bool] = None) -> "Quantity":
-        return numpy.mean(self, axis, dtype, out, keepdims)
+        return numpy.mean(self, axis, dtype, out, keepdims)  # type: ignore
 
     @_delegate_as(numpy.amin)
     def min(self, axis: Optional[Union[int, Sequence[int]]] = None,
@@ -622,7 +622,7 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin):
             dtype: Optional[Dtype] = None, out: Optional["Quantity"] = None,
             ddof: int = 0, keepdims: bool = False) -> "Quantity": ...
 
-    def view(self, *args, **kwargs) -> "Quantity":
+    def view(self, *args: Any, **kwargs: Any) -> "Quantity":
         return Quantity(
             self.value.view(*args, **kwargs),
             self.dimension,
@@ -793,17 +793,22 @@ _ufuncs[numpy.spacing] = _UfuncUnits(unit_map=_match_units)
 _ufuncs[numpy.ldexp] = _UfuncUnits(unit_map=lambda f, x, y: _scalar_units(f, y, offset=1) and _match_units(f, x))
 
 
+# TODO: understand why type: ignore is required here
+def _unwrap_annotation(parameter: inspect.Parameter) -> Type:
+    if parameter.kind == inspect.Parameter.VAR_POSITIONAL:
+        return Sequence[parameter.annotation]  # type: ignore
+    elif parameter.kind == inspect.Parameter.VAR_KEYWORD:
+        return Mapping[str, parameter.annotation]  # type: ignore
+    else:
+        return parameter.annotation  # type: ignore
+
+
 # TODO: consider performance
-# TODO: figure out why mypy causes errors with inspect
 def _array_func(func: Callable) -> Callable[[Callable], Callable]:
     def decorator(unit_map: Callable) -> Callable:
         signature = inspect.signature(unit_map)
         annotation: Mapping[str, Type] = {
-            name: (
-                Sequence[param.annotation] if param.kind is param.VAR_POSITIONAL
-                else Mapping[str, param.annotation] if param.kind is param.VAR_KEYWORD
-                else param.annotation  # type: ignore
-            )
+            name: _unwrap_annotation(param)
             for name, param in signature.parameters.items()
         }
 
@@ -877,9 +882,12 @@ def _array_func(func: Callable) -> Callable[[Callable], Callable]:
                 return result
             if type(output) is tuple:
                 return Quantity(result, *output)
-            if type(result) is tuple or type(result) is list:
+            if type(result) is tuple:
                 if len(output) == len(result):
                     return tuple(r if o is None else Quantity(r, *o) for r, o in zip(result, output))
+            elif type(result) is list:
+                if len(output) == len(result):
+                    return [r if o is None else Quantity(r, *o) for r, o in zip(result, output)]
             else:
                 if len(output) == 1:
                     return result if output[0] is None else Quantity(result, *output[0])
@@ -2412,7 +2420,7 @@ def polyder(p: Quantity, m: int = 1) -> Tuple[Dimension, Scale]:
 @_array_func(numpy.polyfit)
 def polyfit(x: Quantity, y: Quantity, deg: int, rcond: Optional[float] = None,
             full: bool = False, w: Optional[Quantity] = None,
-            cov: Union[bool, str] = False) -> Tuple[Dimension, Scale]:
+            cov: Union[bool, str] = False) -> Union[Tuple[Dimension, Scale], List[Optional[Tuple[Dimension, Scale]]]]:
     _ = _scalar_units(numpy.polyfit, x)
     if w is not None:
         prod = _multiply_units(numpy.polyfit, y, w, labels={1: "w"})
