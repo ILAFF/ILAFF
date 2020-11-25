@@ -5,7 +5,7 @@ lattice spacing. This ensures that the independent lattice spacings are kept
 distinct.
 
 New quantities should generally be constructed by multiplying a float, numpy
-array, or other raw value by one of the provided units (i.e. ``units.MeV``, 
+array, or other raw value by one of the provided units (i.e. ``units.MeV``,
 ``units.GeV``, ``units.fm``, or ``units.a(scale)``).
 
 Examples:
@@ -52,7 +52,7 @@ Example:
     '16.0 a'
 
 
-Quantities can be negated, raised to integer powers or rooted.
+Quantities can be negated or raised to rational powers.
 
 Examples:
     >>> m2 = 0.0182 * GeV**2
@@ -62,9 +62,9 @@ Examples:
     '6.028568000000001e-06 GeV^6'
     >>> str(m2**-1)
     '2.1394470638645964 fm^2'
-    >>> str(m2.sqrt())
+    >>> str(m2**0.5)
     '0.13490737563232041 GeV'
-    >>> str((m2**3).root(6))
+    >>> str((m2**3)**(1/6))
     '0.13490737563232044 GeV'
 
 
@@ -107,7 +107,7 @@ Examples:
     >>> str(m + n)
     Traceback (most recent call last):
         ...
-    ValueError: Can't add values: incompatible scales
+    ValueError: Mismatched scale for second argument of add
     >>> str(m + n.set_scale(a(latt), 0.1 * fm))
     '0.33232697880000006 GeV'
 
