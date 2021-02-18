@@ -3,6 +3,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from functools import wraps
 import inspect
+from itertools import chain
 import numpy  # type: ignore
 from pathlib import Path
 from typing import (
@@ -423,7 +424,7 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.Ext
 
     @property
     def dtype(self) -> Dtype:
-        return object  # self.value.dtype
+        return self.value.dtype
 
     @property
     def flags(self) -> Flags:
@@ -894,7 +895,7 @@ class QuantityIndex(Quantity, pandas.Index):
 
     @property
     def dtype(self) -> Dtype:
-        return object  # self.value.dtype
+        return self.value.dtype
 
     @property
     def values(self) -> Quantity:

@@ -46,21 +46,16 @@ class Cost(iminuit.cost.Cost, abc.ABC):
     @abc.abstractmethod
     def set_data(self, data: Dataset) -> None: ...
 
-    @abc.abstractmethod
-    def __call__(self, *args) -> Any: ...
-
 
 def _unwrap_quantity(quantity: Optional[Union[Quantity, DataArray]]) -> Any:
     if quantity is None:
         return None
     if isinstance(quantity, Quantity):
         return quantity.value
-    print(repr(quantity.variable._data))
     if isinstance(quantity.variable._data, Quantity):
         quantity = quantity.copy()
         quantity.data = quantity.variable._data.value
     elif isinstance(getattr(quantity.variable._data, "array", None), QuantityIndex):
-        print("a", quantity.variable._data.array.array)
         quantity = DataArray(
             quantity.variable._data.array.array,
             coords=quantity.coords,
@@ -83,7 +78,7 @@ class NDCorrelatedChiSquared(Cost):
         self.dim = dim
         self.set_data(data)
 
-        iminuit.cost.Cost.__init__(self, [arg for arg in self.args if arg not in data], verbose, 1.0)
+        iminuit.cost.Cost.__init__(self, [arg for arg in self.args if arg not in data], verbose)
 
     def set_data(self, data: Dataset) -> None:
         if callable(self.var):
@@ -103,19 +98,13 @@ class NDCorrelatedChiSquared(Cost):
             self.axis = None
 
     def wrapped_model(self, *args):
-        args_print = iter(args)
         args = iter(args)
-        for v, da in zip(self.args, self.data_args):
-            if da is None:
-                print(f"{v} = {repr(next(args_print))}")
-            else:
-                print(f"{v} = {repr(da)}")
         return self.model(*(
             data_arg if data_arg is not None else next(args)
             for data_arg in self.data_args
         ))
 
-    def __call__(self, *args) -> float:
+    def _call(self, args) -> float:
         y = self.y
         ym = self.wrapped_model(*args)
         r = y - ym
@@ -227,23 +216,57 @@ def check_model_units(data: Dataset, var: Union[str, Callable], model: ModelFn, 
         raise NotImplementedError("Paramater unit inference not yet supported")
 
 
-def fit_jack(data: Dataset, var: Union[str, Callable], model: ModelFn,
+def value_jack(v: DataArray, dim: str = 'jack') -> DataArray:
+    return v.isel({dim: 0})
+
+
+def error_jack(v: DataArray, dim: str = 'jack') -> DataArray:
+    vbar = v.isel({dim: slice(1, None)})
+    N = len(vbar[dim])
+    return (((vbar - vbar.mean(dim))**2).sum(dim) * (N - 1) / N)**0.5
+
+
+def fit_jack(data: Dataset, var: Union[str, Callable, Tuple[Union[str, Callable], ...]], model: Union[ModelFn, Tuple[ModelFn]],
              cost: Type[Cost] = NDCorrelatedChiSquared, dim: str = 'jack', keep: Sequence[str] = (), **kwargs) -> Dataset:
-    units, unwrapped = check_model_units(data, var, model, kwargs)
+    if isinstance(var, tuple):
+        if not isinstance(model, tuple) or len(var) != len(model):
+            raise ValueError("model and var should be the same length")
+        for v, m in zip(var, model):
+            units, unwrapped = check_model_units(data, v, m, kwargs)
+    else:
+        if isinstance(model, tuple):
+            raise ValueError("model and var should be the same length")
+        units, unwrapped = check_model_units(data, var, model, kwargs)
     if len(keep) == 0:
-        c = cost(
-            data, var, model, dim,
-            value=lambda v, axis: v[(slice(None),) * axis + (0,)],
-            covariance=lambda a, b, axis: (
-                (a[(slice(None),) * axis + (slice(1, None),)] - a[(slice(None),) * axis + (slice(1, None),)].mean(axis=axis))
-                * (b[(slice(None),) * axis + (slice(1, None),)] - b[(slice(None),) * axis + (slice(1, None),)].mean(axis=axis))
-            ).sum(axis=axis) * (a.shape[axis] - 2) / (a.shape[axis] - 1)
-        )
+        if isinstance(var, tuple):
+            c = sum(
+                cost(
+                    data, v, m, dim,
+                    value=lambda v, axis: v[(slice(None),) * axis + (0,)],
+                    covariance=lambda a, b, axis: (
+                        (a[(slice(None),) * axis + (slice(1, None),)] - a[(slice(None),) * axis + (slice(1, None),)].mean(axis=axis, keepdims=True))
+                        * (b[(slice(None),) * axis + (slice(1, None),)] - b[(slice(None),) * axis + (slice(1, None),)].mean(axis=axis, keepdims=True))
+                    ).sum(axis=axis) * (a.shape[axis] - 2) / (a.shape[axis] - 1)
+                )
+                for v, m in zip(var, model)
+            )
+        else:
+            c = cost(
+                data, var, model, dim,
+                value=lambda v, axis: v[(slice(None),) * axis + (0,)],
+                covariance=lambda a, b, axis: (
+                    (a[(slice(None),) * axis + (slice(1, None),)] - a[(slice(None),) * axis + (slice(1, None),)].mean(axis=axis, keepdims=True))
+                    * (b[(slice(None),) * axis + (slice(1, None),)] - b[(slice(None),) * axis + (slice(1, None),)].mean(axis=axis, keepdims=True))
+                ).sum(axis=axis) * (a.shape[axis] - 2) / (a.shape[axis] - 1)
+            )
         m = Minuit(c, **unwrapped)
         m.migrad()
+        for k in unwrapped.keys():
+            print(f"{k}: {m.values[k]} +- {m.errors[k]}")
+        print(m.covariance)
         return Dataset(
             {
-                k: v * units[k] for k, v in m.values.items()
+                k: m.values[k] * units[k] for k in unwrapped.keys()
             },
             attrs=data.attrs,
         )
