@@ -7,43 +7,150 @@ import functools
 import numpy
 from xarray import Dataset, DataArray, Variable, broadcast
 from typing import Callable, Union, Mapping, Sequence, Any, Tuple, Type, Optional
-from inspect import signature
+from inspect import signature, Signature
 import abc
 import itertools
+from dataclasses import dataclass, field
+from functools import reduce
+from operator import mul
 
-from ilaff.units import Quantity, QuantityIndex, Scalar
-
-ModelFn = Callable[..., Quantity]
+from ilaff.units import Quantity, QuantityIndex, Scalar, one
 
 
-def jackknife(data: Dataset, dim: str = 'configuration', jackdim: str = 'jack', fn: Callable[[Dataset, str], Dataset] = lambda v: numpy.mean(v, axis=0)) -> Dataset:
+IntoModel = Union["Model", Callable[..., Quantity]]
+
+
+class Model(ABC):
+    @staticmethod
+    def new(fn: IntoModel) -> "Model":
+        if isinstance(fn, Model):
+            return fn
+        if callable(fn):
+            return ModelFn(fn)
+        raise TypeError(f"'{fn!r}' cannot be used as a model")
+
+    @abstractmethod
+    def __call__(self, *args: Any, **kwargs: Any) -> Quantity:
+        ...
+
+    def evaluate(self, data: Dataset) -> DataArray:
+        return self(**{key: data[key] for key in signature(self).parameters.keys()})
+
+    def partial(self, *data: Dataset, **kwargs: Union[DataArray, Quantity]) -> "Model":
+        data_args = {
+            key: next(iter(d[key] for d in data if key in d))
+            for key in signature(self).parameters.keys()
+            if key not in kwargs and any(key in d for d in data)
+        }
+        return PartialModel(self, {**kwargs, **data_args})
+
+
+@dataclass(frozen=True)
+class ModelFn(Model):
+    __wrapped__: Callable[..., Quantity]
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Quantity:
+        return self.__wrapped__(*args, **kwargs)
+
+
+@dataclass(frozen=True)
+class PartialModel(Model):
+    __wrapped__: Model
+    kwargs: Mapping[str, Any]
+    __signature__: Signature = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self):
+        sig = signature(self.__wrapped__)
+        sig = sig.replace(parameters=(
+            v
+            for k, v in sig.parameters.items()
+            if k not in self.kwargs
+        ))
+        object.__setattr__(self, '__signature__', sig)
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Quantity:
+        bound = self.__signature__.bind(*args, **kwargs)
+        return self.__wrapped__(**bound.arguments, **self.kwargs)
+
+
+
+def evaluate(model: IntoModel, data: Dataset) -> DataArray:
+    return Model.new(model).evaluate(data)
+
+
+def partial(model: IntoModel, *data: Dataset, **kwargs: Union[DataArray, Quantity]) -> Model:
+    return Model.new(model).partial(*data, **kwargs)
+
+
+def jackknife(data: Union[Dataset, DataArray], dim: str = 'configuration', jackdim: str = 'jack', fn: Callable[[Dataset, str], Dataset] = lambda v: numpy.mean(v, axis=0), bin_width: int = 1) -> Dataset:
     data = data.transpose(dim, *(d for d in data.dims if d != dim))
+    if bin_width < 1:
+        raise ValueError("Bin width must be at least one")
+    if len(data[dim]) < bin_width * 2:
+        raise ValueError("Insufficient configurations for jackknife")
 
-    jack = {
-        k: (#Variable(
-            [jackdim] + [d for d in v.dims if d != dim],
-            numpy.stack([fn(v.data)] + [fn(a) for a in resample.jackknife.resample(v.data)]),
-            #v.attrs,
-            #v.encoding,
-        ) if dim in v.dims else v
-        for k, v in data.variables.items()
-    }
+    if isinstance(data, Dataset):
+        # TODO: consider if bin should always average
+        jack = {
+            k: (#Variable(
+                [jackdim] + [d for d in v.dims if d != dim],
+                numpy.stack(
+                    [fn(v.data)]
+                    + [
+                        fn(a)
+                        for a in resample.jackknife.resample(
+                            v.data if bin_width == 1 else
+                            numpy.add.reduceat(
+                                v.data,
+                                range(0, v.data.shape[0], bin_width),
+                            )[:(-1 if v.data.shape[0] % bin_width != 0 else None)] / bin_width,
+                            copy=False,
+                        )
+                    ]
+                ),
+                #v.attrs,
+                #v.encoding,
+            ) if dim in v.dims else v
+            for k, v in data.variables.items()
+        }
 
-    # TODO: figure out how to use variables directly here
-    d = Dataset(
-        {k: jack[k] for k in data},
-        coords={k: jack[k] for k in data.coords},
-        attrs=data.attrs,
-    )
+        # TODO: figure out how to use variables directly here
+        d = Dataset(
+            {k: jack[k] for k in data},
+            coords={k: jack[k] for k in data.coords},
+            attrs=data.attrs,
+        )
 
-    return d
+        return d
+    else:
+        return DataArray(
+            data=numpy.stack(
+                [fn(data.data)]
+                + [
+                    fn(a)
+                    for a in resample.jackknife.resample(
+                        data.data if bin_width == 1 else
+                        numpy.add.reduceat(
+                            data.data,
+                            range(0, data.data.shape[0], bin_width),
+                        )[:(-1 if data.data.shape[0] % bin_width != 0 else None)] / bin_width,
+                        copy=False,
+                    )
+                ]
+            ),
+            coords=data.coords,
+            dims=[jackdim] + [d for d in data.dims if d != dim],
+            name=data.name,
+            attrs=data.attrs,
+        )
+
 
 
 class Cost(iminuit.cost.Cost, abc.ABC):
-    @abc.abstractmethod
-    def __init__(self, data: Dataset, var: Union[str, Callable[..., Quantity]], model: ModelFn, value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray], verbose: int = 0): ...
+    @abstractmethod
+    def __init__(self, data: Dataset, var: Union[str, Callable[..., Quantity]], model: Model, value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray], covariant_dims: Sequence[str] = (), verbose: int = 0): ...
 
-    @abc.abstractmethod
+    @abstractmethod
     def set_data(self, data: Dataset) -> None: ...
 
 
@@ -68,7 +175,7 @@ def _unwrap_quantity(quantity: Optional[Union[Quantity, DataArray]]) -> Any:
 
 
 class NDCorrelatedChiSquared(Cost):
-    def __init__(self, data: Dataset, var: Union[str, Callable], model: ModelFn, dim: str, value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray], verbose: int = 0):
+    def __init__(self, data: Dataset, var: Union[str, Callable], model: Model, units: Mapping[str, Quantity], dim: str, value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray], covariant_dims: Sequence[str] = (), verbose: int = 0):
         self.var = var
         self.model = model
         self.value = value
@@ -76,6 +183,8 @@ class NDCorrelatedChiSquared(Cost):
         self.args = describe(self.model)
         self.bound_args = [arg for arg in self.args if arg in data]
         self.dim = dim
+        self.units = units
+        self.covariant_dims = covariant_dims
         self.set_data(data)
 
         iminuit.cost.Cost.__init__(self, [arg for arg in self.args if arg not in data], verbose)
@@ -83,33 +192,58 @@ class NDCorrelatedChiSquared(Cost):
     def set_data(self, data: Dataset) -> None:
         if callable(self.var):
             sig = describe(self.var)
-            y = _unwrap_quantity(self.var(*(data[v] for v in sig)))
+            y = self.var(*(data[v] for v in sig))
         else:
-            y = _unwrap_quantity(data[self.var])
+            y = data[self.var]
         args = [data.get(v) for v in self.args]
-        broadcasted = iter(broadcast(y, *(_unwrap_quantity(v) for v in args if v is not None)))
-        self.y = next(broadcasted).data
-        self.data_args = [
-            next(broadcasted).data if v is not None else None for v in args
-        ]
-        if self.dim is not None:
-            self.axis = y.dims.index(self.dim)
-        else:
-            self.axis = None
+        # TODO: check that data args match units
+        # broadcasted = iter(broadcast(y, *(v for v in args if v is not None)))
+        # self.y = next(broadcasted).data
+        # self.data_args = [
+        #     next(broadcasted).data if v is not None else None for v in args
+        # ]
+        self.y, self.data_args = y, args
+        # if self.dim is not None:
+        #     self.axis = y.dims.index(self.dim)
+        # else:
+        #     self.axis = None
 
     def wrapped_model(self, *args):
         args = iter(args)
         return self.model(*(
-            data_arg if data_arg is not None else next(args)
-            for data_arg in self.data_args
+            data_arg if data_arg is not None else next(args) * self.units.get(kw, 1)
+            for (kw, data_arg) in zip(self.args, self.data_args)
         ))
 
     def _call(self, args) -> float:
         y = self.y
         ym = self.wrapped_model(*args)
         r = y - ym
-        # TODO incorporate correlations along dimensions
-        return (self.value(r, self.axis)**2 / self.covariance(r, r, self.axis)).sum()
+        # covariant_dims = r.attrs.get("covariant_dims", ())
+        covariant_dims = self.covariant_dims
+        if len(covariant_dims) == 0:
+            if self.dim is not None:
+                axis = r.dims.index(self.dim)
+            else:
+                axis = None
+            r = r.data
+            return (self.value(r, axis)**2 / self.covariance(r, r, axis)).sum().in_unit(one)
+        else:
+            #print(f"covariant: {covariant_dims}")
+            #print(args)
+            #print(y)
+            #print(ym)
+            #print(r)
+            r = r.stack(covariant_dims=covariant_dims)
+            if self.dim is not None:
+                axis = r.dims.index(self.dim)
+            else:
+                axis = None
+            rbar = r.expand_dims('covariant_dims_2', -2).data
+            r = r.expand_dims('covariant_dims_2', -1).data
+            cov = self.covariance(r, rbar, axis)
+            inv_cov = numpy.linalg.inv(cov)
+            return (self.value(rbar, axis) @ inv_cov @ self.value(r, axis)).sum().in_unit(one)
 
 
 def unwrap_xarray(a: Any) -> Any:
@@ -122,7 +256,7 @@ def unwrap_xarray(a: Any) -> Any:
     return getattr(data, "array", data)
 
 
-def check_model_units(data: Dataset, var: Union[str, Callable], model: ModelFn, kwargs: Mapping[str, Any]) -> Tuple[Mapping[str, Quantity], Mapping[str, Any]]:
+def check_model_units(data: Dataset, var: Union[str, Callable], model: IntoModel, kwargs: Mapping[str, Any]) -> Tuple[Mapping[str, Quantity], Mapping[str, Any]]:
     data = data.isel({dim: 0 for dim in data.dims})
     if callable(var):
         sig = describe(var)
@@ -144,6 +278,7 @@ def check_model_units(data: Dataset, var: Union[str, Callable], model: ModelFn, 
         None,
     )
 
+    model = Model.new(model)
     sig = describe(model)
 
     if scale is None:
@@ -167,7 +302,7 @@ def check_model_units(data: Dataset, var: Union[str, Callable], model: ModelFn, 
         q: Optional[Quantity] = None
         for prefix in ("", "error_", "limit_", "fix_"):
             if k.startswith(prefix) and k[len(prefix):] in params:
-                q = params[k]
+                q = params[k[len(prefix):]]
                 break
         if q is None:
             raise ValueError(f"Quantity passed to unexpected argument '{k}'")
@@ -185,7 +320,7 @@ def check_model_units(data: Dataset, var: Union[str, Callable], model: ModelFn, 
         q: Optional[Quantity] = None
         for prefix in ("", "error_", "limit_", "fix_"):
             if k.startswith(prefix) and k[len(prefix):] in params:
-                q = params[k]
+                q = params[k[len(prefix):]]
                 break
         if q is not None:
             if Scalar != q.dimension:
@@ -205,15 +340,18 @@ def check_model_units(data: Dataset, var: Union[str, Callable], model: ModelFn, 
     for v, p in zip(sig, args):
         if p is None:
             raise ValueError(f"Model parameter '{v}' not specified")
-    ym = model(*args)
-    if isinstance(ym, Quantity):
-        if y.dimension != ym.dimension:
-            raise ValueError(f"Model and data have incompatible mass dimensions: {y.dimension} and {ym.dimension}")
-        if y.dimension != Scalar and y.scale != ym.scale:
-            raise ValueError("Mismatched scale for model and data")
-        return {k: Quantity(1, v.dimension, v.scale) for k, v in params.items()}, unwrapped
-    else:
-        raise NotImplementedError("Paramater unit inference not yet supported")
+    ym = unwrap_xarray(model(*args))
+    if not isinstance(ym, Quantity):
+        ym = ym * one
+    if y.dimension != ym.dimension:
+        raise ValueError(f"Model and data have incompatible mass dimensions: {ym.dimension} and {y.dimension}")
+    if y.dimension != Scalar and y.scale != ym.scale:
+        raise ValueError("Mismatched scale for model and data")
+    return (
+        {k: Quantity(1, v.dimension, v.scale) for k, v in params.items()},
+        {k: v for k, v in unwrapped.items() if k in params},
+        {k[6:]: v for k, v in unwrapped.items() if k[:6] == "limit_" and k[6:] in params},
+    )
 
 
 def value_jack(v: DataArray, dim: str = 'jack') -> DataArray:
@@ -226,49 +364,69 @@ def error_jack(v: DataArray, dim: str = 'jack') -> DataArray:
     return (((vbar - vbar.mean(dim))**2).sum(dim) * (N - 1) / N)**0.5
 
 
-def fit_jack(data: Dataset, var: Union[str, Callable, Tuple[Union[str, Callable], ...]], model: Union[ModelFn, Tuple[ModelFn]],
-             cost: Type[Cost] = NDCorrelatedChiSquared, dim: str = 'jack', keep: Sequence[str] = (), **kwargs) -> Dataset:
+def covariance_jack(v: DataArray, w: DataArray, dim: str = 'jack') -> DataArray:
+    vbar = v.isel({dim: slice(1, None)})
+    wbar = w.isel({dim: slice(1, None)})
+    N = len(vbar[dim])
+    return ((vbar - vbar.mean(dim)) * (wbar - wbar.mean(dim))).sum(dim) * (N - 1) / N
+
+
+def fit_jack(data: Dataset, var: Union[str, Callable, Tuple[Union[str, Callable], ...]], model: Union[IntoModel, Tuple[IntoModel]],
+             cost: Type[Cost] = NDCorrelatedChiSquared, dim: str = 'jack', keep: Sequence[str] = (), covariant_dims: Sequence[str] = (), **kwargs) -> Dataset:
     if isinstance(var, tuple):
         if not isinstance(model, tuple) or len(var) != len(model):
             raise ValueError("model and var should be the same length")
+        model = tuple(Model.new(m) for m in model)
         for v, m in zip(var, model):
-            units, unwrapped = check_model_units(data, v, m, kwargs)
+            units, unwrapped, limits = check_model_units(data, v, m, kwargs)
     else:
         if isinstance(model, tuple):
             raise ValueError("model and var should be the same length")
-        units, unwrapped = check_model_units(data, var, model, kwargs)
+        model = Model.new(model)
+        units, unwrapped, limits = check_model_units(data, var, model, kwargs)
     if len(keep) == 0:
         if isinstance(var, tuple):
             c = sum(
                 cost(
-                    data, v, m, dim,
+                    data, v, m, units, dim,
                     value=lambda v, axis: v[(slice(None),) * axis + (0,)],
                     covariance=lambda a, b, axis: (
                         (a[(slice(None),) * axis + (slice(1, None),)] - a[(slice(None),) * axis + (slice(1, None),)].mean(axis=axis, keepdims=True))
                         * (b[(slice(None),) * axis + (slice(1, None),)] - b[(slice(None),) * axis + (slice(1, None),)].mean(axis=axis, keepdims=True))
-                    ).sum(axis=axis) * (a.shape[axis] - 2) / (a.shape[axis] - 1)
+                    ).sum(axis=axis) * (a.shape[axis] - 2) / (a.shape[axis] - 1),
+                    covariant_dims=covariant_dims,
                 )
                 for v, m in zip(var, model)
             )
         else:
             c = cost(
-                data, var, model, dim,
+                data, var, model, units, dim,
                 value=lambda v, axis: v[(slice(None),) * axis + (0,)],
                 covariance=lambda a, b, axis: (
                     (a[(slice(None),) * axis + (slice(1, None),)] - a[(slice(None),) * axis + (slice(1, None),)].mean(axis=axis, keepdims=True))
                     * (b[(slice(None),) * axis + (slice(1, None),)] - b[(slice(None),) * axis + (slice(1, None),)].mean(axis=axis, keepdims=True))
-                ).sum(axis=axis) * (a.shape[axis] - 2) / (a.shape[axis] - 1)
+                ).sum(axis=axis) * (a.shape[axis] - 2) / (a.shape[axis] - 1),
+                covariant_dims=covariant_dims,
             )
         m = Minuit(c, **unwrapped)
+        for k, v in limits.items():
+            m.limits[k] = v
         m.migrad()
-        for k in unwrapped.keys():
-            print(f"{k}: {m.values[k]} +- {m.errors[k]}")
-        print(m.covariance)
+        # for k in unwrapped.keys():
+        #     print(f"{k}: {m.values[k]} +- {m.errors[k]}")
+        # print(m.covariance)
+        chi2 = m.fval
+        dof = reduce(mul, (v for k, v in data.dims.items() if k != dim)) - len(units)
+        # print(f"chi2 / dof = {chi2} / {dof}")
         return Dataset(
             {
                 k: m.values[k] * units[k] for k in unwrapped.keys()
             },
-            attrs=data.attrs,
+            attrs={
+                "chi2": chi2,
+                "dof": dof,
+                **data.attrs,
+            }
         )
     else:
         raise NotImplementedError("kept dimensions not yet supported")
