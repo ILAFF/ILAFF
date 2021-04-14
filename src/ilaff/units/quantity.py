@@ -203,7 +203,7 @@ def _iop(method: Callable[["Quantity", Any], Any]) -> Callable[["Quantity", Any]
     @wraps(method)
     def fn(self: "Quantity", other: Any) -> Any:
         if isinstance(self.value, numpy.ndarray):
-            return wrapped(other)
+            return wrapped(self, other)
         else:
             return NotImplemented
     return fn
@@ -224,6 +224,20 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.Ext
     value: Any
     dimension: Dimension
     scale: Scale
+
+    def __eq__(self, other: Any) -> Any:
+        if other in _upcast_types:
+            return numpy.eq(self, other)
+
+        if not isinstance(other, Quantity):
+            other = Quantity(other, Scalar, self.scale)
+
+        _ = _match_units(self.__eq__, self, other)
+
+        return self.value == other.value
+
+    def __hash__(self) -> Any:
+        return hash(self.value)
 
     def set_scale(self, curr: "Quantity", new: "Quantity") -> "Quantity":
         if self.scale != curr.scale:
