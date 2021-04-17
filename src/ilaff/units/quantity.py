@@ -226,8 +226,8 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.Ext
     scale: Scale
 
     def __eq__(self, other: Any) -> Any:
-        if other in _upcast_types:
-            return numpy.eq(self, other)
+        if type(other) in _upcast_types:
+            return numpy.equal(self, other)
 
         if not isinstance(other, Quantity):
             other = Quantity(other, Scalar, self.scale)
@@ -540,6 +540,12 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.Ext
 
     @_delegate_to(numpy)
     def copy(self, order: str = 'K') -> "Quantity": ...
+
+    def __copy__(self) -> "QuantityIndex":
+        return self.copy()
+
+    def __deepcopy__(self, memo: Any = None) -> "QuantityIndex":
+        return self.copy()
 
     @_delegate_to(numpy)
     def cumprod(self, axis: Optional[int] = None, dtype: Optional[Dtype] = None,
@@ -972,6 +978,12 @@ class QuantityIndex(Quantity, pandas.Index):
             self.scale,
             self._dtype,
         )
+
+    def __copy__(self) -> "QuantityIndex":
+        return self.copy(deep=False)
+
+    def __deepcopy__(self, memo: Any = None) -> "QuantityIndex":
+        return self.copy(deep=True)
 
     def equals(self, other: pandas.api.extensions.ExtensionArray) -> bool:
         if not isinstance(other, QuantityIndex):

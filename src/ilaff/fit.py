@@ -6,7 +6,7 @@ import resample
 import functools
 import numpy
 from xarray import Dataset, DataArray, Variable, broadcast
-from typing import Callable, Union, Mapping, Sequence, Any, Tuple, Type, Optional
+from typing import Callable, Union, Mapping, Sequence, Any, Tuple, Type, Optional, Iterator
 from inspect import signature, Signature
 import abc
 import itertools
@@ -384,23 +384,35 @@ def fit_jack(data: Dataset, var: Union[str, Callable, Tuple[Union[str, Callable]
             raise ValueError("model and var should be the same length")
         model = Model.new(model)
         units, unwrapped, limits = check_model_units(data, var, model, kwargs)
-    if len(keep) == 0:
-        if isinstance(var, tuple):
-            c = sum(
-                cost(
-                    data, v, m, units, dim,
-                    value=lambda v, axis: v[(slice(None),) * axis + (0,)],
-                    covariance=lambda a, b, axis: (
-                        (a[(slice(None),) * axis + (slice(1, None),)] - a[(slice(None),) * axis + (slice(1, None),)].mean(axis=axis, keepdims=True))
-                        * (b[(slice(None),) * axis + (slice(1, None),)] - b[(slice(None),) * axis + (slice(1, None),)].mean(axis=axis, keepdims=True))
-                    ).sum(axis=axis) * (a.shape[axis] - 2) / (a.shape[axis] - 1),
-                    covariant_dims=covariant_dims,
-                )
-                for v, m in zip(var, model)
-            )
-        else:
-            c = cost(
-                data, var, model, units, dim,
+
+    if isinstance(keep, str):
+        keep = (keep,)
+
+    if dim in keep:
+        new_dim = f"_{dim}"
+        while new_dim in data.dims:
+            new_dim = f"_{new_dim}"
+        expanded_data = Dataset(
+            data_vars={
+                k: v.rename({dim: new_dim}).expand_dims({dim: len(data[dim])}).copy() if dim in v.dims else v
+                for k, v in data.data_vars.items()
+            },
+            coords={
+                k: v.rename({dim: new_dim}).expand_dims({dim: len(data[dim])}).copy() if dim in v.dims else v
+                for k, v in data.coords.items()
+            },
+            attrs=data.attrs,
+        )
+        for key in itertools.chain(data.data_vars, data.coords):
+            if dim in data[key].dims:
+                expanded_data[key][{new_dim: 0}] = data[key].variable
+        data = expanded_data
+        dim = new_dim
+
+    if isinstance(var, tuple):
+        costs = [
+            cost(
+                data, v, m, units, dim,
                 value=lambda v, axis: v[(slice(None),) * axis + (0,)],
                 covariance=lambda a, b, axis: (
                     (a[(slice(None),) * axis + (slice(1, None),)] - a[(slice(None),) * axis + (slice(1, None),)].mean(axis=axis, keepdims=True))
@@ -408,16 +420,35 @@ def fit_jack(data: Dataset, var: Union[str, Callable, Tuple[Union[str, Callable]
                 ).sum(axis=axis) * (a.shape[axis] - 2) / (a.shape[axis] - 1),
                 covariant_dims=covariant_dims,
             )
-        m = Minuit(c, **unwrapped)
-        for k, v in limits.items():
-            m.limits[k] = v
+            for v, m in zip(var, model)
+        ]
+        c = sum(costs)
+
+        def set_data(data: Dataset):
+            for cost in costs:
+                cost.set_data(data)
+    else:
+        c = cost(
+            data, var, model, units, dim,
+            value=lambda v, axis: v[(slice(None),) * axis + (0,)],
+            covariance=lambda a, b, axis: (
+                (a[(slice(None),) * axis + (slice(1, None),)] - a[(slice(None),) * axis + (slice(1, None),)].mean(axis=axis, keepdims=True))
+                * (b[(slice(None),) * axis + (slice(1, None),)] - b[(slice(None),) * axis + (slice(1, None),)].mean(axis=axis, keepdims=True))
+            ).sum(axis=axis) * (a.shape[axis] - 2) / (a.shape[axis] - 1),
+            covariant_dims=covariant_dims,
+        )
+
+        def set_data(data: Dataset):
+            c.set_data(data)
+
+    m = Minuit(c, **unwrapped)
+    for k, v in limits.items():
+        m.limits[k] = v
+
+    if len(keep) == 0:
         m.migrad()
-        # for k in unwrapped.keys():
-        #     print(f"{k}: {m.values[k]} +- {m.errors[k]}")
-        # print(m.covariance)
         chi2 = m.fval
         dof = reduce(mul, (v for k, v in data.dims.items() if k != dim)) - len(units)
-        # print(f"chi2 / dof = {chi2} / {dof}")
         return Dataset(
             {
                 k: m.values[k] * units[k] for k in unwrapped.keys()
@@ -429,34 +460,50 @@ def fit_jack(data: Dataset, var: Union[str, Callable, Tuple[Union[str, Callable]
             }
         )
     else:
-        raise NotImplementedError("kept dimensions not yet supported")
-        # def indices(dims: Tuple[str]) -> Iterator[Mapping[str, int]]:
-        #     if len(dims) == 0:
-        #         yield {}
-        #     else:
-        #         index = indices(dims[1:])
-        #         for i in ??:
-        #             index[dims[0]] = i
-        #             yield index
+        def indices(dims: Tuple[str]) -> Iterator[Mapping[str, int]]:
+            if len(dims) == 0:
+                yield {}
+            else:
+                for index in indices(dims[1:]):
+                    for i in data[dims[0]]:
+                        index[dims[0]] = i
+                        yield index
 
-        # c = cost(
-        #     data.isel(index), var, model,
-        #     value=lambda v: v.isel({dim: 0}),
-        #     covariance=lambda a, b: (
-        #         (a.isel({dim: slice(1, None)}) - a.isel({dim: slice(1, None)}).mean(dim))
-        #         * (b.isel({dim: slice(1, None)}) - b.isel({dim: slice(1, None)}).mean(dim))
-        #     ).sum(dim) * (len(a[dim]) - 2) / (len(a[dim]) - 1)
-        # )
-        # m = Minuit(c, **kwargs)
-        # m.migrad()
-        # res = Dataset({
-        #     k: (keep, 
-        # }, coords={
-        # })
-        # for index in indices(keep):
-        #     m.migrad()
-        # return Dataset(
-        #     {
-        #         k: v for k,v in m.values.items()
-        #     },
-        # )
+        def fit_at(index: Mapping[str, int]) -> Tuple[DataArray, float]:
+            set_data(data[index])
+            m.migrad()
+            return (
+                Dataset(
+                    {
+                        k: m.values[k] * units[k] for k in unwrapped.keys()
+                    },
+                ),
+                m.fval,
+            )
+
+        index_iter = iter(indices(keep))
+
+        idx = next(index_iter)
+        dof = reduce(mul, (v for k, v in data[idx].dims.items() if k != dim)) - len(units)
+        result, chi2 = fit_at(idx)
+        result = result.expand_dims({
+            dim: len(data[dim])
+            for dim in keep
+        })
+        for k in unwrapped.keys():
+            result[k] = result[k].copy()
+        chi2 = DataArray(chi2).expand_dims({
+            dim: len(data[dim])
+            for dim in keep
+        }).copy()
+        for idx in index_iter:
+            result_idx, chi2[idx] = fit_at(idx)
+            for k in unwrapped.keys():
+                result[k][idx] = result_idx[k].variable
+
+        result.attrs = {
+            'chi2': chi2,
+            'dof': dof,
+        }
+
+        return result
