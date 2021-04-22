@@ -15,6 +15,7 @@ from functools import reduce
 from operator import mul
 
 from ilaff.units import Quantity, QuantityIndex, Scalar, one
+from ilaff.units.quantity import _upcast_types
 
 
 IntoModel = Union["Model", Callable[..., Quantity]]
@@ -44,6 +45,33 @@ class Model(ABC):
         }
         return PartialModel(self, {**kwargs, **data_args})
 
+    def __neg__(self) -> "Model":
+        return -1 * self
+
+    def __pos__(self) -> "Model":
+        return self
+
+    def __add__(self, other: IntoModel) -> "Model":
+        return AddModel(self, Model.new(other))
+
+    def __radd__(self, other: IntoModel) -> "Model":
+        return AddModel(Model.new(other), self)
+
+    def __sub__(self, other: IntoModel) -> "Model":
+        return self + (-Model.new(other))
+
+    def __rsub__(self, other: IntoModel) -> "Model":
+        return Model.new(other) + (-self)
+
+    def __mul__(self, other: Union[Quantity, float]) -> "Model":
+        return ScaleModel(other, self)
+
+    def __rmul__(self, other: Union[Quantity, float]) -> "Model":
+        return ScaleModel(other, self)
+
+    def __truediv__(self, other: Union[Quantity, float]) -> "Model":
+        return ScaleModel(1 / other, self)
+
 
 @dataclass(frozen=True)
 class ModelFn(Model):
@@ -72,6 +100,51 @@ class PartialModel(Model):
         bound = self.__signature__.bind(*args, **kwargs)
         return self.__wrapped__(**bound.arguments, **self.kwargs)
 
+
+@dataclass(frozen=True)
+class ScaleModel(Model):
+    scale: Union[Quantity, float]
+    __wrapped__: Model
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Quantity:
+        return self.scale * self.__wrapped__(*args, **kwargs)
+
+
+@dataclass(frozen=True)
+class AddModel(Model):
+    left: Model
+    right: Model
+    __signature__: Signature = field(init=False, repr=False, compare=False)
+    _left_signature: Signature = field(init=False, repr=False, compare=False)
+    _right_signature: Signature = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self):
+        left_sig = signature(self.left)
+        right_sig = signature(self.right)
+        sig = left_sig.replace(parameters=itertools.chain(
+            (
+                v
+                for k, v in left_sig.parameters.items()
+            ),
+            (
+                v
+                for k, v in right_sig.parameters.items()
+                if k not in left_sig.parameters
+            ),
+        ))
+        object.__setattr__(self, '__signature__', sig)
+        object.__setattr__(self, '_left_signature', left_sig)
+        object.__setattr__(self, '_right_signature', right_sig)
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Quantity:
+        bound = self.__signature__.bind(*args, **kwargs)
+        return (
+            self.left(**{k: bound.arguments[k] for k in self._left_signature.parameters if k in bound.arguments})
+            + self.right(**{k: bound.arguments[k] for k in self._right_signature.parameters if k in bound.arguments})
+        )
+
+
+_upcast_types += [ModelFn, PartialModel, ScaleModel, AddModel]
 
 
 def evaluate(model: IntoModel, data: Dataset) -> DataArray:
@@ -227,7 +300,11 @@ class NDCorrelatedChiSquared(Cost):
             else:
                 axis = None
             r = r.data
-            return (self.value(r, axis)**2 / self.covariance(r, r, axis)).sum().in_unit(one)
+            chi2 = (self.value(r, axis)**2 / self.covariance(r, r, axis)).sum()
+            try:
+                return chi2.in_unit(one)
+            except AttributeError:
+                return chi2
         else:
             #print(f"covariant: {covariant_dims}")
             #print(args)
@@ -242,8 +319,16 @@ class NDCorrelatedChiSquared(Cost):
             rbar = r.expand_dims('covariant_dims_2', -2).data
             r = r.expand_dims('covariant_dims_2', -1).data
             cov = self.covariance(r, rbar, axis)
-            inv_cov = numpy.linalg.inv(cov)
-            return (self.value(rbar, axis) @ inv_cov @ self.value(r, axis)).sum().in_unit(one)
+            try:
+                inv_cov = numpy.linalg.inv(cov)
+            except e:
+                print(args)
+                raise e
+            chi2 = (self.value(rbar, axis) @ inv_cov @ self.value(r, axis)).sum()
+            try:
+                return chi2.in_unit(one)
+            except AttributeError:
+                return chi2
 
 
 def unwrap_xarray(a: Any) -> Any:
@@ -256,7 +341,7 @@ def unwrap_xarray(a: Any) -> Any:
     return getattr(data, "array", data)
 
 
-def check_model_units(data: Dataset, var: Union[str, Callable], model: IntoModel, kwargs: Mapping[str, Any]) -> Tuple[Mapping[str, Quantity], Mapping[str, Any]]:
+def check_model_units(data: Dataset, var: Union[str, Callable], model: IntoModel, kwargs: Mapping[str, Any]) -> Tuple[Mapping[str, Quantity], Mapping[str, Any], Mapping[str, Any]]:
     data = data.isel({dim: 0 for dim in data.dims})
     if callable(var):
         sig = describe(var)
@@ -281,9 +366,6 @@ def check_model_units(data: Dataset, var: Union[str, Callable], model: IntoModel
     model = Model.new(model)
     sig = describe(model)
 
-    if scale is None:
-        return {k: 1 for k in sig}, kwargs
-
     params = {
         v: q if isinstance(q, Quantity) else Quantity(q, Scalar, scale)
         for v, q in (
@@ -297,6 +379,13 @@ def check_model_units(data: Dataset, var: Union[str, Callable], model: IntoModel
         )
         if q is not None
     }
+
+    if scale is None:
+        return (
+            {k: 1 for k in sig},
+            {k: v for k, v in kwargs.items() if k in params},
+            {k[6:]: v for k, v in kwargs.items() if k[:6] == "limit_" and k[6:] in params},
+        )
 
     def check_unwrap(k: str, v: Quantity) -> Any:
         q: Optional[Quantity] = None
@@ -371,17 +460,21 @@ def covariance_jack(v: DataArray, w: DataArray, dim: str = 'jack') -> DataArray:
     return ((vbar - vbar.mean(dim)) * (wbar - wbar.mean(dim))).sum(dim) * (N - 1) / N
 
 
-def fit_jack(data: Dataset, var: Union[str, Callable, Tuple[Union[str, Callable], ...]], model: Union[IntoModel, Tuple[IntoModel]],
+def fit_jack(data: Union[Dataset, Tuple[Dataset, ...]], var: Union[str, Callable, Tuple[Union[str, Callable], ...]], model: Union[IntoModel, Tuple[IntoModel]],
              cost: Type[Cost] = NDCorrelatedChiSquared, dim: str = 'jack', keep: Sequence[str] = (), covariant_dims: Sequence[str] = (), **kwargs) -> Dataset:
     if isinstance(var, tuple):
         if not isinstance(model, tuple) or len(var) != len(model):
             raise ValueError("model and var should be the same length")
         model = tuple(Model.new(m) for m in model)
-        for v, m in zip(var, model):
-            units, unwrapped, limits = check_model_units(data, v, m, kwargs)
+        if not isinstance(data, tuple):
+            data = (data,) * len(var)
+        for d, v, m in zip(data, var, model):
+            units, unwrapped, limits = check_model_units(d, v, m, kwargs)
     else:
         if isinstance(model, tuple):
             raise ValueError("model and var should be the same length")
+        if isinstance(data, tuple):
+            raise ValueError("data and var should be the same length")
         model = Model.new(model)
         units, unwrapped, limits = check_model_units(data, var, model, kwargs)
 
@@ -390,29 +483,48 @@ def fit_jack(data: Dataset, var: Union[str, Callable, Tuple[Union[str, Callable]
 
     if dim in keep:
         new_dim = f"_{dim}"
-        while new_dim in data.dims:
-            new_dim = f"_{new_dim}"
-        expanded_data = Dataset(
-            data_vars={
-                k: v.rename({dim: new_dim}).expand_dims({dim: len(data[dim])}).copy() if dim in v.dims else v
-                for k, v in data.data_vars.items()
-            },
-            coords={
-                k: v.rename({dim: new_dim}).expand_dims({dim: len(data[dim])}).copy() if dim in v.dims else v
-                for k, v in data.coords.items()
-            },
-            attrs=data.attrs,
-        )
-        for key in itertools.chain(data.data_vars, data.coords):
-            if dim in data[key].dims:
-                expanded_data[key][{new_dim: 0}] = data[key].variable
+        if isinstance(data, tuple):
+            while any(new_dim in d.dims for d in data):
+                new_dim = f"_{new_dim}"
+            expanded_data = tuple(Dataset(
+                data_vars={
+                    k: v.rename({dim: new_dim}).expand_dims({dim: len(d[dim])}).copy() if dim in v.dims else v
+                    for k, v in d.data_vars.items()
+                },
+                coords={
+                    k: v.rename({dim: new_dim}).expand_dims({dim: len(d[dim])}).copy() if dim in v.dims else v
+                    for k, v in d.coords.items()
+                },
+                attrs=d.attrs,
+            ) for d in data)
+            for i, d in enumerate(data):
+                for key in itertools.chain(d.data_vars, d.coords):
+                    if dim in d[key].dims:
+                        expanded_data[i][key][{new_dim: 0}] = d[key].variable
+        else:
+            while new_dim in data.dims:
+                new_dim = f"_{new_dim}"
+            expanded_data = Dataset(
+                data_vars={
+                    k: v.rename({dim: new_dim}).expand_dims({dim: len(data[dim])}).copy() if dim in v.dims else v
+                    for k, v in data.data_vars.items()
+                },
+                coords={
+                    k: v.rename({dim: new_dim}).expand_dims({dim: len(data[dim])}).copy() if dim in v.dims else v
+                    for k, v in data.coords.items()
+                },
+                attrs=data.attrs,
+            )
+            for key in itertools.chain(data.data_vars, data.coords):
+                if dim in data[key].dims:
+                    expanded_data[key][{new_dim: 0}] = data[key].variable
         data = expanded_data
         dim = new_dim
 
     if isinstance(var, tuple):
         costs = [
             cost(
-                data, v, m, units, dim,
+                d, v, m, units, dim,
                 value=lambda v, axis: v[(slice(None),) * axis + (0,)],
                 covariance=lambda a, b, axis: (
                     (a[(slice(None),) * axis + (slice(1, None),)] - a[(slice(None),) * axis + (slice(1, None),)].mean(axis=axis, keepdims=True))
@@ -420,13 +532,13 @@ def fit_jack(data: Dataset, var: Union[str, Callable, Tuple[Union[str, Callable]
                 ).sum(axis=axis) * (a.shape[axis] - 2) / (a.shape[axis] - 1),
                 covariant_dims=covariant_dims,
             )
-            for v, m in zip(var, model)
+            for d, v, m in zip(data, var, model)
         ]
         c = sum(costs)
 
-        def set_data(data: Dataset):
-            for cost in costs:
-                cost.set_data(data)
+        def set_data(data: Tuple[Dataset, ...]):
+            for d, c in zip(data, costs):
+                c.set_data(d)
     else:
         c = cost(
             data, var, model, units, dim,
@@ -448,7 +560,13 @@ def fit_jack(data: Dataset, var: Union[str, Callable, Tuple[Union[str, Callable]
     if len(keep) == 0:
         m.migrad()
         chi2 = m.fval
-        dof = reduce(mul, (v for k, v in data.dims.items() if k != dim)) - len(units)
+        if isinstance(data, tuple):
+            dof = sum(reduce(mul, (v for k, v in d.dims.items() if k != dim)) for d in data) - len(units)
+            # TODO: consider preserving attrs
+            attrs = {}
+        else:
+            dof = reduce(mul, (v for k, v in data.dims.items() if k != dim)) - len(units)
+            attrs = data.attrs
         return Dataset(
             {
                 k: m.values[k] * units[k] for k in unwrapped.keys()
@@ -456,21 +574,29 @@ def fit_jack(data: Dataset, var: Union[str, Callable, Tuple[Union[str, Callable]
             attrs={
                 "chi2": chi2,
                 "dof": dof,
-                **data.attrs,
+                **attrs,
             }
         )
     else:
+        # TODO: check for mismatched dimensions
+        if isinstance(data, tuple):
+            first_data = data[0]
+        else:
+            first_data = data
         def indices(dims: Tuple[str]) -> Iterator[Mapping[str, int]]:
             if len(dims) == 0:
                 yield {}
             else:
                 for index in indices(dims[1:]):
-                    for i in data[dims[0]]:
+                    for i in first_data[dims[0]]:
                         index[dims[0]] = i
                         yield index
 
         def fit_at(index: Mapping[str, int]) -> Tuple[DataArray, float]:
-            set_data(data[index])
+            if isinstance(data, tuple):
+                set_data(tuple(d[index] for d in data))
+            else:
+                set_data(data[index])
             m.migrad()
             return (
                 Dataset(
@@ -484,16 +610,21 @@ def fit_jack(data: Dataset, var: Union[str, Callable, Tuple[Union[str, Callable]
         index_iter = iter(indices(keep))
 
         idx = next(index_iter)
-        dof = reduce(mul, (v for k, v in data[idx].dims.items() if k != dim)) - len(units)
+        if isinstance(data, tuple):
+            dof = sum(reduce(mul, (v for k, v in d[idx].dims.items() if k != dim)) for d in data) - len(units)
+            attrs = {}
+        else:
+            dof = reduce(mul, (v for k, v in data[idx].dims.items() if k != dim)) - len(units)
+            attrs = data.attrs
         result, chi2 = fit_at(idx)
         result = result.expand_dims({
-            dim: len(data[dim])
+            dim: len(first_data[dim])
             for dim in keep
         })
         for k in unwrapped.keys():
             result[k] = result[k].copy()
         chi2 = DataArray(chi2).expand_dims({
-            dim: len(data[dim])
+            dim: len(first_data[dim])
             for dim in keep
         }).copy()
         for idx in index_iter:
@@ -504,6 +635,7 @@ def fit_jack(data: Dataset, var: Union[str, Callable, Tuple[Union[str, Callable]
         result.attrs = {
             'chi2': chi2,
             'dof': dof,
+            **attrs
         }
 
         return result

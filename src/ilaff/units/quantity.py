@@ -159,6 +159,7 @@ except ImportError:
     pass
 
 # xarray (DataArray, Dataset, Variable)
+DataArray = None
 try:
     from xarray import DataArray, Dataset, Variable
 
@@ -262,7 +263,11 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.Ext
             new.scale,
         )
 
-    def in_unit(self, val: "Quantity") -> Any:
+    def in_unit(self, val: Union["Quantity", DataArray]) -> Any:
+        try:
+            val = val.data
+        except AttributeError:
+            pass
         try:
             res = self / val
         except ValueError:
