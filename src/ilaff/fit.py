@@ -6,7 +6,7 @@ import resample
 import functools
 import numpy
 from xarray import Dataset, DataArray, Variable, broadcast
-from typing import Callable, Union, Mapping, Sequence, Any, Tuple, Type, Optional, Iterator
+from typing import Callable, Union, Mapping, Sequence, Any, Tuple, Type, Optional, Iterator, Iterable
 from inspect import signature, Signature
 import abc
 import itertools
@@ -155,12 +155,55 @@ def partial(model: IntoModel, *data: Dataset, **kwargs: Union[DataArray, Quantit
     return Model.new(model).partial(*data, **kwargs)
 
 
-def jackknife(data: Union[Dataset, DataArray], dim: str = 'configuration', jackdim: str = 'jack', fn: Callable[[Dataset, str], Dataset] = lambda v: numpy.mean(v, axis=0), bin_width: int = 1) -> Dataset:
+def jackknife(data: Union[Dataset, DataArray], dim: str = 'configuration', jackdim: str = 'jack', fn: Callable[[Dataset, str], Dataset] = lambda v: numpy.mean(v, axis=0), bin_width: Optional[int] = None, n_bins: Optional[int] = None) -> Dataset:
     data = data.transpose(dim, *(d for d in data.dims if d != dim))
-    if bin_width < 1:
-        raise ValueError("Bin width must be at least one")
-    if len(data[dim]) < bin_width * 2:
-        raise ValueError("Insufficient configurations for jackknife")
+
+    if bin_width is not None and n_bins is not None:
+        raise ValueError("Only one of bin_width and n_bins should be set")
+    if n_bins is None:
+        if bin_width is None:
+            bin_width = 1
+        if bin_width < 1:
+            raise ValueError("Bin width must be at least one")
+        if len(data[dim]) < bin_width * 2:
+            raise ValueError("Insufficient configurations for jackknife")
+
+        if bin_width == 1:
+            def jackknife_data(v):
+                return v.data
+        else:
+            def jackknife_data(v):
+                return numpy.add.reduceat(
+                    v.data,
+                    range(0, v.data.shape[0], bin_width),
+                    axis=0,
+                )[:(-1 if v.data.shape[0] % bin_width != 0 else None)] / bin_width,
+
+    else:
+        n_conf = len(data[dim])
+        if n_bins > n_conf:
+            raise ValueError("Insufficient configurations for jackknife")
+
+        def jack_ind() -> Iterable[int]:
+            last_idx = 0
+            for conf_idx in range(n_conf):
+                jack_idx = ((conf_idx * n_bins) // n_conf) % n_bins + 1
+                if jack_idx != last_idx:
+                    last_idx = jack_idx
+                    yield conf_idx
+
+        jack_ind = list(jack_ind())
+
+        def jackknife_data(v: DataArray):
+            return numpy.add.reduceat(
+                v.data,
+                jack_ind,
+                axis=0,
+            ) / numpy.add.reduceat(
+                numpy.ones_like(v.data),
+                jack_ind,
+                axis=0,
+            )
 
     if isinstance(data, Dataset):
         # TODO: consider if bin should always average
@@ -172,11 +215,7 @@ def jackknife(data: Union[Dataset, DataArray], dim: str = 'configuration', jackd
                     + [
                         fn(a)
                         for a in resample.jackknife.resample(
-                            v.data if bin_width == 1 else
-                            numpy.add.reduceat(
-                                v.data,
-                                range(0, v.data.shape[0], bin_width),
-                            )[:(-1 if v.data.shape[0] % bin_width != 0 else None)] / bin_width,
+                            jackknife_data(v),
                             copy=False,
                         )
                     ]

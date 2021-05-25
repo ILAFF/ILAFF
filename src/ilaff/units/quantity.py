@@ -516,7 +516,7 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.Ext
     def astype(self, dtype: Dtype, order: str = 'K', casting: str = 'unsafe',
                subok: bool = True, copy: bool = True) -> "Quantity":
         return Quantity(
-            self.value.astype(dtype, order=order, casting=casting, subok=subok, copy=copy),
+            self.value.astype(dtype, casting=casting, subok=subok, copy=copy),
             self.dimension,
             self.scale,
         )
@@ -886,6 +886,30 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.Ext
             self.scale,
             self.value.dtype,
         )
+
+
+def in_unit(val: Any, unit: Union[Quantity, DataArray]) -> Any:
+    try:
+        result = val / unit
+    except ValueError:
+        raise ValueError("Can't convert units: incompatible scales")
+
+    try:
+        result_data = result.data
+        result_dims = result.dims
+    except AttributeError:
+        result_data = result
+
+    if result_data.dimension.mass_dim != 0:
+        raise ValueError(
+            "Can't convert units: incompatible mass dimensions {} and {}"
+            .format(self.dimension.mass_dim, val.dimension.mass_dim)
+        )
+
+    if result is result_data:
+        return result.value
+
+    return result.copy(data=result_data.value)
 
 
 def _index_method(func: Callable) -> Callable:
