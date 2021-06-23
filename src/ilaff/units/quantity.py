@@ -1172,6 +1172,64 @@ def _array_func(func: Callable) -> Callable[[Callable], Callable]:
     return decorator
 
 
+def _einsum_func(func: Callable) -> Callable[[Callable], Callable]:
+    def decorator(unit_map: Callable) -> Callable:
+        def wrapper(args: Iterable[Any], kwargs: Mapping[str, Any]) -> Any:
+            operands = args
+            print(operands)
+            try:
+                scale = next(iter(
+                    argument
+                    for argument in operands
+                    if argument is not None and isinstance(argument, Quantity)
+                )).scale
+            except StopIteration:
+                raise TypeError(f"Unexpected Quantity passed to {func.__name__}")
+
+            unwrapped = [
+                argument.value
+                if isinstance(argument, Quantity) else
+                argument
+                for argument in operands
+            ]
+
+            wrapped = [
+                Quantity(argument, Scalar, scale)
+                for argument in operands
+                if not isinstance(argument, (str, list))
+            ]
+            labels = [
+                {
+                    1: "first",
+                    2: "second",
+                    3: "third",
+                    4: "fourth",
+                    5: "fifth",
+                    6: "sixth",
+                }.get(i + 1, f"{i+1}th")
+                for i, argument in enumerate(operands)
+                if not isinstance(argument, (str, list))
+            ]
+
+            output = unit_map(wrapped, dict(enumerate(labels)))
+            result = func(*unwrapped, **kwargs)
+            out = kwargs.get('out')
+            if out is not None:
+                if not isinstance(out, Quantity):
+                    out = Quantity(out, Scalar, scale)
+                _ = _match_units(func, Quantity(0, *output), out, labels={1: "'out'"})
+            if output is None:
+                return result
+            if type(output) is tuple:
+                return Quantity(result, *output)
+
+            raise RuntimeError(f"Return value of {func.__name__} does not match expected format")
+        _arrayfuncs[func] = wrapper
+        return func
+
+    return decorator
+
+
 @_array_func(numpy.take)
 def take(a: Quantity, indices: ArrayLike, axis: Optional[int] = None,
          out: Optional[Quantity] = None, mode: str = 'raise') -> Tuple[Dimension, Scale]:
@@ -2759,16 +2817,15 @@ def polydiv(a1: Quantity, a2: Quantity) -> Tuple[Dimension, Scale]:
 
 
 # Special handling for einsum methods due to alternate calling convention
-# TODO: implement this
 
-# @_einsum_func(numpy.einsum_path)
-# def einsum_path(args: Sequence[Quantity], labels: Mapping[int, str]) -> Tuple[Dimension, Scale]:
-#     return _multiply_units(numpy.einsum_path, *args, labels=labels, offset=1)
+@_einsum_func(numpy.einsum_path)
+def einsum_path(args: Sequence[Quantity], labels: Mapping[int, str]) -> Tuple[Dimension, Scale]:
+    return _multiply_units(numpy.einsum_path, *args, labels=labels, offset=1)
 
 
-# @_einsum_func(numpy.einsum)
-# def einsum(args: Sequence[Quantity], labels: Mapping[int, str]) -> Tuple[Dimension, Scale]:
-#     return _multiply_units(numpy.einsum, *args, labels=labels, offset=1)
+@_einsum_func(numpy.einsum)
+def einsum(args: Sequence[Quantity], labels: Mapping[int, str]) -> Tuple[Dimension, Scale]:
+    return _multiply_units(numpy.einsum, *args, labels=labels, offset=1)
 
 # TODO: add any relevant functions from
 # numpy/lib/histograms.py
