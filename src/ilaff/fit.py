@@ -6,7 +6,7 @@ import resample
 import functools
 import numpy
 from xarray import Dataset, DataArray, Variable, broadcast
-from typing import Callable, Union, Mapping, Sequence, Any, Tuple, Type, Optional, Iterator, Iterable
+from typing import Callable, Union, Mapping, Sequence, Any, Tuple, Type, Optional, Iterator, Iterable, List, AbstractSet
 from inspect import signature, Signature
 import abc
 import itertools
@@ -155,7 +155,9 @@ def partial(model: IntoModel, *data: Dataset, **kwargs: Union[DataArray, Quantit
     return Model.new(model).partial(*data, **kwargs)
 
 
-def jackknife(data: Union[Dataset, DataArray], dim: str = 'configuration', jackdim: str = 'jack', fn: Callable[[Dataset, str], Dataset] = lambda v: numpy.mean(v, axis=0), bin_width: Optional[int] = None, n_bins: Optional[int] = None) -> Dataset:
+def jackknife(data: Union[Dataset, DataArray], dim: str = 'configuration', jackdim: Union[str, Sequence[str]] = 'jack', fn: Callable[[Dataset, str], Dataset] = lambda v: numpy.mean(v, axis=0), bin_width: Optional[int] = None, n_bins: Optional[int] = None) -> Dataset:
+    if isinstance(jackdim, str):
+        jackdim = [jackdim]
     data = data.transpose(dim, *(d for d in data.dims if d != dim))
 
     if bin_width is not None and n_bins is not None:
@@ -169,16 +171,15 @@ def jackknife(data: Union[Dataset, DataArray], dim: str = 'configuration', jackd
             raise ValueError("Insufficient configurations for jackknife")
 
         if bin_width == 1:
-            def jackknife_data(v):
-                return v.data
+            def jackknife_data(v: numpy.ndarray) -> numpy.ndarray:
+                return v
         else:
-            def jackknife_data(v):
+            def jackknife_data(v: numpy.ndarray) -> numpy.ndarray:
                 return numpy.add.reduceat(
-                    v.data,
-                    range(0, v.data.shape[0], bin_width),
+                    v,
+                    range(0, v.shape[0], bin_width),
                     axis=0,
-                )[:(-1 if v.data.shape[0] % bin_width != 0 else None)] / bin_width,
-
+                )[:(-1 if v.shape[0] % bin_width != 0 else None)] / bin_width
     else:
         n_conf = len(data[dim])
         if n_bins > n_conf:
@@ -194,64 +195,63 @@ def jackknife(data: Union[Dataset, DataArray], dim: str = 'configuration', jackd
 
         jack_ind = list(jack_ind())
 
-        def jackknife_data(v: DataArray):
+        def jackknife_data(v: numpy.ndarray) -> numpy.ndarray:
             return numpy.add.reduceat(
-                v.data,
+                v,
                 jack_ind,
                 axis=0,
             ) / numpy.add.reduceat(
-                numpy.ones_like(v.data),
+                numpy.ones_like(v),
                 jack_ind,
                 axis=0,
             )
+
+    def jackknifed(v: numpy.ndarray, jackdims: List[str], njack: Optional[int] = None, skip: AbstractSet[int] = frozenset()) -> numpy.ndarray:
+        if len(jackdims) == 0:
+            return fn(v)
+        if njack is None:
+            njack = v.shape[0]
+        reduced_dims = jackdims[1:]
+        full = jackknifed(v, reduced_dims, njack, skip)
+        samples = iter(resample.jackknife.resample(
+            v,
+            copy=False,
+        ))
+        return numpy.stack(
+            [full]
+            + [
+                numpy.nan * full if i in skip else
+                jackknifed(next(samples), reduced_dims, njack, skip | frozenset((i,)))
+                for i in range(njack)
+            ]
+        )
 
     if isinstance(data, Dataset):
         # TODO: consider if bin should always average
         jack = {
             k: (#Variable(
-                [jackdim] + [d for d in v.dims if d != dim],
-                numpy.stack(
-                    [fn(v.data)]
-                    + [
-                        fn(a)
-                        for a in resample.jackknife.resample(
-                            jackknife_data(v),
-                            copy=False,
-                        )
-                    ]
-                ),
+                list(jackdim) + [d for d in v.dims if d != dim],
+                jackknifed(jackknife_data(v.data), list(jackdim))
                 #v.attrs,
                 #v.encoding,
             ) if dim in v.dims else v
             for k, v in data.variables.items()
+            if k != dim
         }
 
         # TODO: figure out how to use variables directly here
         d = Dataset(
             {k: jack[k] for k in data},
-            coords={k: jack[k] for k in data.coords},
+            coords={k: jack[k] for k in data.coords if k != dim},
             attrs=data.attrs,
         )
 
         return d
     else:
         return DataArray(
-            data=numpy.stack(
-                [fn(data.data)]
-                + [
-                    fn(a)
-                    for a in resample.jackknife.resample(
-                        data.data if bin_width == 1 else
-                        numpy.add.reduceat(
-                            data.data,
-                            range(0, data.data.shape[0], bin_width),
-                        )[:(-1 if data.data.shape[0] % bin_width != 0 else None)] / bin_width,
-                        copy=False,
-                    )
-                ]
-            ),
+            data=jackknifed(jackknife_data(v.data), list(jackdim)),
             coords=data.coords,
-            dims=[jackdim] + [d for d in data.dims if d != dim],
+            dims=list(jackdim) + [d for d in data.dims if d != dim],
             name=data.name,
             attrs=data.attrs,
         )
@@ -363,6 +363,85 @@ class NDCorrelatedChiSquared(Cost):
             except e:
                 print(args)
                 raise e
+            chi2 = (self.value(rbar, axis) @ inv_cov @ self.value(r, axis)).sum()
+            try:
+                return chi2.in_unit(one)
+            except AttributeError:
+                return chi2
+
+
+class YCorrelatedChiSquared(Cost):
+    def __init__(self, data: Dataset, var: Union[str, Callable], model: Model, units: Mapping[str, Quantity], dim: str, value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray], covariant_dims: Sequence[str] = (), verbose: int = 0):
+        self.var = var
+        self.model = model
+        self.value = value
+        self.covariance = covariance
+        self.args = describe(self.model)
+        self.bound_args = [arg for arg in self.args if arg in data]
+        self.dim = dim
+        self.units = units
+        self.covariant_dims = covariant_dims
+        self.set_data(data)
+
+        iminuit.cost.Cost.__init__(self, [arg for arg in self.args if arg not in data], verbose)
+
+    def set_data(self, data: Dataset) -> None:
+        if callable(self.var):
+            sig = describe(self.var)
+            y = self.var(*(data[v] for v in sig))
+        else:
+            y = data[self.var]
+        args = [
+            None if d is None else
+            d.data if self.dim not in d.dims else
+            self.value(d.data, d.dims.index(self.dim) if self.dim is not None else None)
+            for d in (data.get(v) for v in self.args)
+        ]
+        # TODO: check that data args match units
+        covariant_dims = self.covariant_dims
+        if len(covariant_dims) == 0:
+            if self.dim is not None:
+                axis = y.dims.index(self.dim)
+            else:
+                axis = None
+            self.inv_cov = 1 / self.covariance(y.data, y.data, axis)
+            self.y = self.value(y.data, axis)
+        else:
+            y = y.stack(covariant_dims=covariant_dims)
+            if self.dim is not None:
+                axis = y.dims.index(self.dim)
+            else:
+                axis = None
+            ybar = y.expand_dims('covariant_dims_2', -2).data
+            y = y.expand_dims('covariant_dims_2', -1).data
+            cov = self.covariance(y, ybar, axis)
+            self.inv_cov = numpy.linalg.inv(cov)
+            self.ybar = self.value(ybar, axis)
+            self.ybar = self.value(y, axis)
+        self.data_args = args
+
+    def wrapped_model(self, *args):
+        args = iter(args)
+        return self.model(*(
+            data_arg if data_arg is not None else next(args) * self.units.get(kw, 1)
+            for (kw, data_arg) in zip(self.args, self.data_args)
+        ))
+
+    def _call(self, args) -> float:
+        # TODO: ensure y and ym dimensions match
+        ym = self.wrapped_model(*args)
+        covariant_dims = self.covariant_dims
+        if len(covariant_dims) == 0:
+            r = self.y - ym
+            chi2 = (r**2 * self.inv_cov).sum()
+            try:
+                return chi2.in_unit(one)
+            except AttributeError:
+                return chi2
+        else:
+            rbar = self.ybar - ym
+            r = self.y - ym
+            inv_cov = self.inv_cov
             chi2 = (self.value(rbar, axis) @ inv_cov @ self.value(r, axis)).sum()
             try:
                 return chi2.in_unit(one)
@@ -488,14 +567,19 @@ def value_jack(v: DataArray, dim: str = 'jack') -> DataArray:
 
 def error_jack(v: DataArray, dim: str = 'jack') -> DataArray:
     vbar = v.isel({dim: slice(1, None)})
-    N = len(vbar[dim])
+    N = vbar.count(dim)
     return (((vbar - vbar.mean(dim))**2).sum(dim) * (N - 1) / N)**0.5
+
+
+def jack_mean(v: DataArray, dim: str = 'jack') -> DataArray:
+    vbar = v.isel({dim: slice(1, None)})
+    return vbar.mean(dim)
 
 
 def covariance_jack(v: DataArray, w: DataArray, dim: str = 'jack') -> DataArray:
     vbar = v.isel({dim: slice(1, None)})
     wbar = w.isel({dim: slice(1, None)})
-    N = len(vbar[dim])
+    N = vbar.count(dim)
     return ((vbar - vbar.mean(dim)) * (wbar - wbar.mean(dim))).sum(dim) * (N - 1) / N
 
 
