@@ -22,7 +22,7 @@ from ilaff.units.quantity import _upcast_types
 from ilaff.fit import IntoModel, Model, ModelFn, PartialModel, ScaleModel, AddModel, evaluate, partial, jackknife, value_jack, error_jack, covariance_jack, Cost
 
 
-class Cost(iminuit.cost.Cost, abc.ABC):
+class Cost(iminuit.cost.Cost, ABC):
     @abc.abstractmethod
     def __init__(self, var: DataArray, model: DataArray, value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray], covariant_dims: Sequence[str] = (), verbose: int = 0):
         pass
@@ -67,7 +67,7 @@ class Cost(iminuit.cost.Cost, abc.ABC):
 #         return self.fn(*args)
 
 
-class NDCorrelatedChiSquared(Cost):
+class CorrelatedChiSquared(Cost, ABC):
     def __init__(self, var: DataArray, model: DataArray, value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray], covariant_dims: Sequence[str] = (), verbose: int = 0):
         self.var = var
         self.model = model
@@ -79,6 +79,15 @@ class NDCorrelatedChiSquared(Cost):
 
         iminuit.cost.Cost.__init__(self, args, verbose)
 
+    @abstractmethod
+    def set_function(self, residual: Callable[[DataArray, DataArray], DataArray], value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray]) -> None:
+        pass
+
+    def _call(self, args) -> float:
+        return self.fn(*args)
+
+
+class NDCorrelatedChiSquared(CorrelatedChiSquared):
     def set_function(self, residual: Callable[[DataArray, DataArray], DataArray], value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray]) -> None:
         residual_pfunc = residual(self.var, self.model)
         residual_compiled = residual_pfunc.data.value.compile()
@@ -108,9 +117,9 @@ class NDCorrelatedChiSquared(Cost):
 
                 r = res.stack(covariant_dims=self.covariant_dims)
                 rbar = r.rename(covariant_dims='covariant_dims_2')
-                # rbar = rbar.expand_dims('covariant_dims', -2)
-                # r = r.expand_dims('covariant_dims_2', -1)
                 cov = covariance(r, rbar)
+                rbar = rbar.expand_dims('covariant_dims', -2)
+                r = r.expand_dims('covariant_dims_2', -1)
                 try:
                     inv_cov = numpy.linalg.inv(cov.data.value)
                 except:
@@ -123,45 +132,52 @@ class NDCorrelatedChiSquared(Cost):
                 return chi2
             self.fn = chi2
 
-    def _call(self, args) -> float:
-        return self.fn(*args)
 
+class SimpleCorrelatedChiSquared(CorrelatedChiSquared):
+    def set_function(self, residual: Callable[[DataArray, DataArray], DataArray], value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray]) -> None:
+        residual_pfunc = value(residual(self.var, self.model))
+        residual_compiled = residual_pfunc.data.value.compile()
+        if len(self.covariant_dims) == 0:
+            v = covariance(self.var, self.var)
 
-# class SimpleCorrelatedChiSquared(Cost):
-#     def __init__(self, var: DataArray, model: DataArray, value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray], covariant_dims: Sequence[str] = (), verbose: int = 0):
-#         self.var = var
-#         self.residual = var - model
-#         self.covariant_dims = covariant_dims
-# 
-#         self.set_function(value, covariance)
-# 
-#         args = describe(self.fn)
-# 
-#         iminuit.cost.Cost.__init__(self, args, verbose)
-# 
-#     def set_function(self, value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray]) -> None:
-#         if len(self.covariant_dims) == 0:
-#             r = value(self.residual)
-#             v = covariance(var, var)
-#             chi2 = (r**2 / v).sum()
-#             self.fn = chi2.data.compile()
-#         else:
-#             v = self.var.stack(covariant_dims=covariant_dims)
-#             vbar = value(v.expand_dims('covariant_dims_2', -2))
-#             v = value(v.expand_dims('covariant_dims_2', -1))
-# 
-#             cov = covariance(v, vbar)
-#             inv_cov = numpy.linalg.inv(cov.data)
-# 
-#             r = self.residual.stack(covariant_dims=covariant_dims)
-#             rbar = value(r.expand_dims('covariant_dims_2', -2))
-#             r = value(r.expand_dims('covariant_dims_2', -1))
-# 
-#             chi2 = numpy.sum(rbar.data @ inv_cov @ r.data)
-#             self.fn = chi2.data.compile()
-# 
-#     def _call(self, args) -> float:
-#         return self.fn(*args)
+            @wraps(residual_compiled)
+            def chi2(*args):
+                r = residual_pfunc.copy(data=Quantity(
+                    residual_compiled(*args),
+                    residual_pfunc.data.dimension,
+                    residual_pfunc.data.scale,
+                ))
+
+                chi2 = (r**2 / v).sum()
+                return in_unit(chi2, one).data
+            self.fn = chi2
+        else:
+            v = self.var.stack(covariant_dims=self.covariant_dims)
+            vbar = v.rename(covariant_dims='covariant_dims_2')
+            cov = covariance(v, vbar)
+            try:
+                inv_cov = numpy.linalg.inv(cov.data.value)
+            except:
+                print(args)
+                print(r.data.value)
+                print(cov.data.value)
+                raise
+
+            @wraps(residual_compiled)
+            def chi2(*args):
+                res = residual_pfunc.copy(data=Quantity(
+                    residual_compiled(*args),
+                    residual_pfunc.data.dimension,
+                    residual_pfunc.data.scale,
+                ))
+
+                r = res.stack(covariant_dims=self.covariant_dims)
+                rbar = r.rename(covariant_dims='covariant_dims_2')
+                rbar = rbar.expand_dims('covariant_dims', -2).data.value
+                r = r.expand_dims('covariant_dims_2', -1).data.value
+                chi2 = numpy.sum(rbar @ inv_cov @ r)
+                return chi2
+            self.fn = chi2
 
 
 def unwrap_xarray(a: Any) -> Any:
