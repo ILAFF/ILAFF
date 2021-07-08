@@ -55,20 +55,25 @@ def _scalar_units(func: Callable, *inputs: Union["Quantity", "QuantityIndex"], l
 
 def _match_units(func: Callable, *inputs: Union["Quantity", "QuantityIndex"], labels: Mapping[int, str] = {},
                  offset: int = 0, argument: str = "argument") -> Tuple[Dimension, Scale]:
-    # for i in inputs:
-    #     if i.value != 0:
-    #         dimension = i.dimension
-    #         scale = i.scale
-    #         break
-    # else:
-    #     dimension = inputs[0].dimension
-    #     scale = inputs[0].scale
-    # for i, x in enumerate(inputs):
-    #     if x.value == 0:
-    #         continue
-    dimension = inputs[0].dimension
-    scale = inputs[0].scale
+    for i in inputs:
+        try:
+            if i.value != 0:
+                dimension = i.dimension
+                scale = i.scale
+                break
+        except:
+            dimension = i.dimension
+            scale = i.scale
+            break
+    else:
+        dimension = inputs[0].dimension
+        scale = inputs[0].scale
     for i, x in enumerate(inputs):
+        try:
+            if x.value == 0:
+                continue
+        except:
+            pass
         if x.dimension != dimension:
             raise ValueError(
                 f"Invalid mass dimension for {_argument_name(i, labels, offset, argument)}"
@@ -1627,12 +1632,12 @@ def where(condition: ArrayLike, x: Optional[Quantity] = None, y: Optional[Quanti
         if y is None:
             raise TypeError(f"Unexpected Quantity passed to {numpy.inner.__name__}")
         else:
-            return _multiply_units(numpy.inner, y, labels={0: "'y'"})
+            return _match_units(numpy.where, y, labels={0: "'y'"})
     else:
         if y is None:
-            return _multiply_units(numpy.inner, x, labels={0: "'x'"})
+            return _match_units(numpy.where, x, labels={0: "'x'"})
         else:
-            return _multiply_units(numpy.inner, x, y, labels={0: "'x'", 1: "'y'"})
+            return _match_units(numpy.where, x, y, labels={0: "'x'", 1: "'y'"})
 
 
 @_array_func(numpy.lexsort)
