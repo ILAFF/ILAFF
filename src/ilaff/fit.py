@@ -249,7 +249,7 @@ def jackknife(data: Union[Dataset, DataArray], dim: str = 'configuration', jackd
         return d
     else:
         return DataArray(
-            data=jackknifed(jackknife_data(v.data), list(jackdim)),
+            data=jackknifed(jackknife_data(data), list(jackdim)),
             coords=data.coords,
             dims=list(jackdim) + [d for d in data.dims if d != dim],
             name=data.name,
