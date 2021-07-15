@@ -28,7 +28,7 @@ class Cost(iminuit.cost.Cost, ABC):
         pass
 
     @abc.abstractmethod
-    def set_function(self, residual: Callable[[DataArray, DataArray], DataArray], value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray]) -> None:
+    def set_function(self, select: Callable[[DataArray], DataArray], value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray]) -> None:
         pass
 
 
@@ -41,7 +41,7 @@ class Cost(iminuit.cost.Cost, ABC):
 # 
 #         args = describe(self.fn)
 # 
-#         iminuit.cost.Cost.__init__(self, args, verbose)
+#         iminuit.cost.Cost.__init__(self, args, len(self.residual), verbose)
 # 
 #     def set_function(self, value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray]) -> None:
 #         if len(self.covariant_dims) == 0:
@@ -67,29 +67,25 @@ class Cost(iminuit.cost.Cost, ABC):
 #         return self.fn(*args)
 
 
-class CorrelatedChiSquared(Cost, ABC):
+class CorrelatedChiSquared(Cost):
     def __init__(self, var: DataArray, model: DataArray, value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray], covariant_dims: Sequence[str] = (), verbose: int = 0):
         self.var = var
         self.model = model
         self.covariant_dims = covariant_dims
 
-        self.set_function(lambda v, m: v - m, value, covariance)
+        self.set_function(lambda v: v, value, covariance)
 
         args = describe(self.fn)
 
-        iminuit.cost.Cost.__init__(self, args, verbose)
-
-    @abstractmethod
-    def set_function(self, residual: Callable[[DataArray, DataArray], DataArray], value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray]) -> None:
-        pass
+        iminuit.cost.Cost.__init__(self, args, len(self.var - self.model), verbose)
 
     def _call(self, args) -> float:
         return self.fn(*args)
 
 
 class NDCorrelatedChiSquared(CorrelatedChiSquared):
-    def set_function(self, residual: Callable[[DataArray, DataArray], DataArray], value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray]) -> None:
-        residual_pfunc = residual(self.var, self.model)
+    def set_function(self, select: Callable[[DataArray], DataArray], value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray]) -> None:
+        residual_pfunc = select(self.var - self.model)
         residual_compiled = residual_pfunc.data.value.compile()
         if len(self.covariant_dims) == 0:
             @wraps(residual_compiled)
@@ -134,11 +130,12 @@ class NDCorrelatedChiSquared(CorrelatedChiSquared):
 
 
 class SimpleCorrelatedChiSquared(CorrelatedChiSquared):
-    def set_function(self, residual: Callable[[DataArray, DataArray], DataArray], value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray]) -> None:
-        residual_pfunc = value(residual(self.var, self.model))
+    def set_function(self, select: Callable[[DataArray], DataArray], value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray]) -> None:
+        residual_pfunc = value(select(self.var - self.model))
         residual_compiled = residual_pfunc.data.value.compile()
         if len(self.covariant_dims) == 0:
-            v = covariance(self.var, self.var)
+            var = select(self.var)
+            v = covariance(var, var)
 
             @wraps(residual_compiled)
             def chi2(*args):
@@ -152,7 +149,7 @@ class SimpleCorrelatedChiSquared(CorrelatedChiSquared):
                 return in_unit(chi2, one).data
             self.fn = chi2
         else:
-            v = self.var.stack(covariant_dims=self.covariant_dims)
+            v = select(self.var).stack(covariant_dims=self.covariant_dims)
             vbar = v.rename(covariant_dims='covariant_dims_2')
             cov = covariance(v, vbar)
             try:
@@ -859,6 +856,7 @@ def fit_jack(data: Union[Dataset, Tuple[Dataset, ...]], var: Union[str, Callable
 
     if len(keep) == 0:
         m.migrad()
+        # print(f"{tuple(v for v in m.values)} -> {sum(c.__call__(tuple(v for v in m.values)) for c in costs)}")
         chi2 = m.fval
         dof = sum(reduce(mul, (v for k, v in d.dims.items() if k != dim)) for d in data) - len(units)
         # TODO: consider preserving attrs
@@ -892,11 +890,12 @@ def fit_jack(data: Union[Dataset, Tuple[Dataset, ...]], var: Union[str, Callable
             }
             for c in costs:
                 c.set_function(
-                    lambda v, m: (v - m).isel(jack_index),
-                    lambda var: var.isel({dim: dim_idx}),
+                    lambda v: v.sel(jack_index),
+                    lambda var: var.sel({dim: dim_idx}),
                     lambda a, b: covariance_jack(a, b, dim),
                 )
             m.migrad()
+            # print(f"{tuple(v for v in m.values)} -> {sum(c.__call__(tuple(v for v in m.values)) for c in costs)}")
             return (
                 Dataset(
                     {
