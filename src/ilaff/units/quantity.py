@@ -4,15 +4,15 @@ from dataclasses import dataclass
 from functools import wraps
 import inspect
 from itertools import chain
-import numpy  # type: ignore
+import numpy
 from pathlib import Path
 from typing import (
     cast, overload, Any, Optional, Tuple, Iterator, Iterable, Sequence, List,
-    Type, Callable, Mapping, MutableMapping, Union, Sized, TextIO, BinaryIO,
+    Type, Callable, Mapping, MutableMapping, Union, Sized, TextIO, BinaryIO, TypeVar,
 )
 import warnings
-import pandas
-from pandas.util._decorators import cache_readonly
+import pandas  # type: ignore
+from pandas.util._decorators import cache_readonly  # type: ignore
 
 from .dimension import Dimension, Scalar
 
@@ -55,15 +55,15 @@ def _scalar_units(func: Callable, *inputs: Union["Quantity", "QuantityIndex"], l
 
 def _match_units(func: Callable, *inputs: Union["Quantity", "QuantityIndex"], labels: Mapping[int, str] = {},
                  offset: int = 0, argument: str = "argument") -> Tuple[Dimension, Scale]:
-    for i in inputs:
+    for x in inputs:
         try:
-            if i.value != 0:
-                dimension = i.dimension
-                scale = i.scale
+            if x.value != 0:
+                dimension = x.dimension
+                scale = x.scale
                 break
         except:
-            dimension = i.dimension
-            scale = i.scale
+            dimension = x.dimension
+            scale = x.scale
             break
     else:
         dimension = inputs[0].dimension
@@ -164,17 +164,20 @@ except ImportError:
     pass
 
 # xarray (DataArray, Dataset, Variable)
-DataArray = None
 try:
     from xarray import DataArray, Dataset, Variable
 
     _upcast_types += [DataArray, Dataset, Variable]
 except ImportError:
+    DataArray = None  # type: ignore
     pass
 
-def _check_implemented(fn: Callable) -> Callable:
+
+T_Callable = TypeVar("T_Callable", bound=Callable)
+
+def _check_implemented(fn: T_Callable) -> T_Callable:
     @wraps(fn)
-    def wrapped(self, *args, **kwargs):
+    def wrapped(self: Any, *args: Any, **kwargs: Any) -> Any:
         other = args[0]
         if type(other) in _upcast_types:
             return NotImplemented
@@ -184,18 +187,18 @@ def _check_implemented(fn: Callable) -> Callable:
             return NotImplemented
         return fn(self, *args, **kwargs)
 
-    return wrapped
+    return wrapped  # type: ignore
 
 
-def _delegate_to(delegate: Any) -> Callable[[Callable], Callable]:
-    def decorator(method: Callable) -> Callable:
+def _delegate_to(delegate: Any) -> Callable[[T_Callable], T_Callable]:
+    def decorator(method: T_Callable) -> T_Callable:
         return getattr(delegate, method.__name__)  # type: ignore
     return decorator
 
 
-def _delegate_as(fn: Callable) -> Callable[[Callable], Callable]:
-    def decorator(method: Callable) -> Callable:
-        return fn
+def _delegate_as(fn: Callable) -> Callable[[T_Callable], T_Callable]:
+    def decorator(method: T_Callable) -> T_Callable:
+        return fn  # type: ignore
     return decorator
 
 
@@ -244,6 +247,33 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.Ext
 
     def __hash__(self) -> Any:
         return hash(self.value)
+
+    @staticmethod
+    def from_string(string: str, **units: "Quantity") -> "Quantity":
+        from .scale import fm, MeV, GeV, one
+        _units = {
+            'fm': fm,
+            'MeV': MeV,
+            'GeV': GeV,
+        }
+        _units.update(units)
+
+        string = string.strip()
+
+        unit = one
+        for lbl, u in _units.items():
+            print(lbl, string[-len(lbl):])
+            if string[-len(lbl):] == lbl:
+                unit = u
+                string = string[:-len(lbl)].strip()
+                break
+
+        if string[0] == '[' and string[-1] == ']':
+            return numpy.array(
+                [float(s) for s in string[1:-1].replace(',', ' ').split()]
+            ) * unit
+
+        return float(string) * unit
 
     def set_scale(self, curr: "Quantity", new: "Quantity") -> "Quantity":
         if self.scale != curr.scale:
@@ -339,7 +369,7 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.Ext
                 self.scale,
             )
 
-    def __array__(self, t=None) -> numpy.ndarray:
+    def __array__(self, t: Optional[Dtype] = None) -> numpy.ndarray:
         warnings.warn(
             "The unit of the quantity is stripped when downcasting to ndarray.",
             UnitStrippedWarning,
@@ -643,7 +673,7 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.Ext
         )
 
     def nonzero(self) -> numpy.ndarray:
-        return self.value.nonzero()
+        return self.value.nonzero()  # type: ignore
 
     @_delegate_to(numpy)
     def partition(self, kth: Union[int, Sequence[int]], axis: int = -1, kind: str = 'introselect',
@@ -866,11 +896,11 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.Ext
 
     @classmethod
     def _from_sequence(cls, scalars: Sequence["Quantity"], dtype: Optional[Dtype] = None, copy: bool = False) -> "Quantity":
-        dimension, scale = _match_units(self._from_sequence, *scalars, argument="scalar")
+        dimension, scale = _match_units(cls._from_sequence, *scalars, argument="scalar")
         if copy:
-            value = numpy.fromiter((q.value.copy() for q in scalars), dtype=dtype, count=len(scalars))
+            value = numpy.fromiter((q.value.copy() for q in scalars), dtype=dtype, count=len(scalars))  # type: ignore
         else:
-            value = numpy.fromiter((q.value for q in scalars), dtype=dtype, count=len(scalars))
+            value = numpy.fromiter((q.value for q in scalars), dtype=dtype, count=len(scalars))  # type: ignore
         return cls(value, dimension, scale)
 
     @classmethod
@@ -882,7 +912,7 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.Ext
 
     @classmethod
     def _concat_same_type(cls, to_concat: Sequence["Quantity"]) -> "Quantity":
-        return numpy.concatenate(to_concat)
+        return numpy.concatenate(to_concat)  # type: ignore
 
     def to_index(self) -> "QuantityIndex":
         return QuantityIndex(
@@ -908,7 +938,7 @@ def in_unit(val: Any, unit: Union[Quantity, DataArray]) -> Any:
     if result_data.dimension.mass_dim != 0:
         raise ValueError(
             "Can't convert units: incompatible mass dimensions {} and {}"
-            .format(self.dimension.mass_dim, val.dimension.mass_dim)
+            .format(unit.dimension.mass_dim, val.dimension.mass_dim)
         )
 
     if result is result_data:
@@ -917,26 +947,27 @@ def in_unit(val: Any, unit: Union[Quantity, DataArray]) -> Any:
     return result.copy(data=result_data.value)
 
 
-def _index_method(func: Callable) -> Callable:
+def _index_method(func: T_Callable) -> T_Callable:
     @wraps(func)
-    def fn(self, *args, **kwargs) -> Any:
+    def fn(self: "QuantityIndex", *args: Any, **kwargs: Any) -> "QuantityIndex":
         return QuantityIndex(
             getattr(self.index, func.__name__)(*args, **kwargs),
             self.dimension,
             self.scale,
+            self.dtype,
         )
-    return fn
+    return fn  # type: ignore
 
 
 class QuantityIndex(Quantity, pandas.Index):
-    def __new__(cls, index: pandas.Index, dimension: Dimension, scale: Scale, dtype: Dtype) -> "QuantityIndex":
+    def __new__(cls, index: pandas.Index, dimension: Dimension, scale: Scale, dtype: Dtype) -> Any:
         return Quantity.__new__(cls)
 
-    def __init__(self, index: pandas.Index, dimension: Dimension, scale: Scale, dtype: Dtype) -> "QuantityIndex":
+    def __init__(self, index: pandas.Index, dimension: Dimension, scale: Scale, dtype: Dtype) -> None:
         Quantity.__init__(self, index, dimension, scale)
         self._dtype = dtype
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         class_name = type(self).__name__
         space = f"\n{' ' * (len(class_name) + 1)}"
         index = repr(self.value).replace("\n", space)
@@ -960,27 +991,29 @@ class QuantityIndex(Quantity, pandas.Index):
         )
 
     @_index_method
-    def astype(self, dtype: Dtype, copy: bool = True) -> Quantity: ...
+    def astype(self, dtype: Dtype, order: str = 'K', casting: str = 'unsafe',
+               subok: bool = True, copy: bool = True) -> Quantity: ...
 
-    def take(self, indices: ArrayLike, axis: int = 0, allow_fill: bool = True, fill_value: Optional[Quantity] = None, **kwargs) -> Quantity:
-        if fill_value is not None:
-            if isinstance(fill_value, Quantity):
-                wrapped = fill_value
-                unwrapped = fill_value.value
-            else:
-                wrapped = Quantity(fill_value, Scalar, self.scale)
-                unwrapped = fill_value
-            _ = _match_units(self.take, self, wrapped, labels={1: "fill_value"})
-            fill_value = unwrapped
-        return Quantity(
-            self.index.take(indices, axis, allow_fill, fill_value, **kwargs),
-            self.dimension,
-            self.scale,
-        )
+    # def take(self, indices: ArrayLike, axis: int = 0, allow_fill: bool = True, fill_value: Optional[Quantity] = None, **kwargs: Any) -> Quantity:
+    #     if fill_value is not None:
+    #         if isinstance(fill_value, Quantity):
+    #             wrapped = fill_value
+    #             unwrapped = fill_value.value
+    #         else:
+    #             wrapped = Quantity(fill_value, Scalar, self.scale)
+    #             unwrapped = fill_value
+    #         _ = _match_units(self.take, self, wrapped, labels={1: "fill_value"})
+    #         fill_value = unwrapped
+    #     return Quantity(
+    #         self.index.take(indices, axis, allow_fill, fill_value, **kwargs),
+    #         self.dimension,
+    #         self.scale,
+    #     )
 
-    def set_names(self, names, level=None, inplace: bool = False):
+    def set_names(self, names: Union[str, Sequence[str]], level: Optional[Union[int, str, Sequence[Union[int, str]]]] = None, inplace: bool = False) -> "QuantityIndex":
         if inplace:
-            self.index.set_names(names, level, inplace=True)
+            self.value.set_names(names, level, inplace=True)
+            return self
         else:
             return QuantityIndex(
                 self.value.set_names(names, level, inplace=False),
@@ -1021,8 +1054,8 @@ class QuantityIndex(Quantity, pandas.Index):
 
     def equals(self, other: pandas.api.extensions.ExtensionArray) -> bool:
         if not isinstance(other, QuantityIndex):
-            other = QuantityIndex(other, Scalar, self.scale)
-        return self.dimension == other.dimension and self.scale == other.scale and self.value.equals(other.value)
+            other = QuantityIndex(other, Scalar, self.scale, self._dtype)
+        return self.dimension == other.dimension and self.scale == other.scale and self.value.equals(other.value)  # type: ignore
 
 
 _ufuncs[numpy.add] = _UfuncUnits(unit_map=_match_units)
@@ -1453,7 +1486,7 @@ def amin(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
             return _match_units(numpy.amin, a, out, initial, labels={1: "'out'", 2: "'initial'"})
 
 
-@_array_func(numpy.alen)
+@_array_func(numpy.alen)  # type: ignore
 def alen(a: Quantity) -> None:
     return None
 
@@ -1566,13 +1599,13 @@ def cumproduct(a: Quantity, axis: Optional[int] = None, dtype: Optional[Dtype] =
         return _match_units(numpy.cumproduct, a, out, labels={1: "'out'"})
 
 
-@_array_func(numpy.sometrue)
+@_array_func(numpy.sometrue)  # type: ignore
 def sometrue(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
              out: Optional[ArrayLike] = None, keepdims: Optional[bool] = None) -> None:
     return None
 
 
-@_array_func(numpy.alltrue)
+@_array_func(numpy.alltrue)  # type: ignore
 def alltrue(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
             out: Optional[ArrayLike] = None, keepdims: Optional[bool] = None) -> None:
     return None
