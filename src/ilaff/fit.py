@@ -6,7 +6,7 @@ import resample
 import functools
 import numpy
 from xarray import Dataset, DataArray, Variable, broadcast
-from typing import Callable, Union, Mapping, Sequence, Any, Tuple, Type, Optional, Iterator, Iterable, List, AbstractSet
+from typing import Callable, Union, Mapping, Sequence, Any, Tuple, Type, Optional, Iterator, Iterable, List, AbstractSet, TypeVar
 from inspect import signature, Signature
 import abc
 import itertools
@@ -155,7 +155,16 @@ def partial(model: IntoModel, *data: Dataset, **kwargs: Union[DataArray, Quantit
     return Model.new(model).partial(*data, **kwargs)
 
 
-def jackknife(data: Union[Dataset, DataArray], dim: str = 'configuration', jackdim: Union[str, Sequence[str]] = 'jack', fn: Callable[[Dataset, str], Dataset] = lambda v: numpy.mean(v, axis=0), bin_width: Optional[int] = None, n_bins: Optional[int] = None) -> Dataset:
+T = TypeVar("T", Dataset, DataArray)
+
+
+def jackknife(
+        data: T,
+        dim: str = 'configuration',
+        jackdim: Union[str, Sequence[str]] = 'jack',
+        fn: Callable[[Dataset, str], Dataset] = lambda v: numpy.mean(v, axis=0),
+        bin_width: Optional[int] = None,
+        n_bins: Optional[int] = None) -> T:
     if isinstance(jackdim, str):
         jackdim = [jackdim]
     data = data.transpose(dim, *(d for d in data.dims if d != dim))
