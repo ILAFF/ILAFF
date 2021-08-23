@@ -1,5 +1,6 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Tuple
+import uuid
 
 from .dimension import Dimension, Mass, Length, Scalar
 from .quantity import Scale, Quantity
@@ -19,8 +20,10 @@ class Physical(Scale):
         return (one, "")
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(frozen=True)
 class Lattice(Scale):
+    identifier: str = field(default_factory=lambda: uuid.uuid4().hex)
+
     def unit(self, dimension: Dimension) -> Tuple[Quantity, str]:
         if dimension.mass_dim == -1:
             return (a(self), "a")
