@@ -258,7 +258,7 @@ def jackknife(
         return d
     else:
         return DataArray(
-            data=jackknifed(jackknife_data(data), list(jackdim)),
+            data=jackknifed(jackknife_data(data.data), list(jackdim)),
             coords=data.coords,
             dims=list(jackdim) + [d for d in data.dims if d != dim],
             name=data.name,
