@@ -282,6 +282,7 @@ ArrayLike = Any
 DType = Any
 
 
+# TODO: fix Placeholder * DataArray does not work when not using Quantities
 @dataclass(frozen=True)
 class PartialExpr(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.ExtensionArray, abc.ABC):
     shape: Tuple[int, ...] = ()
