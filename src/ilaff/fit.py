@@ -1,11 +1,9 @@
 from abc import ABC, abstractmethod
-from functools import partial
 from iminuit import Minuit, describe
 import iminuit.cost
 import resample
-import functools
 import numpy
-from xarray import Dataset, DataArray, Variable, broadcast
+from xarray import Dataset, DataArray
 from typing import Callable, Union, Mapping, Sequence, Any, Tuple, Type, Optional, Iterator, Iterable, List, AbstractSet, TypeVar
 from inspect import signature, Signature
 import abc
@@ -18,7 +16,7 @@ from ilaff.units import Quantity, QuantityIndex, Scalar, one
 from ilaff.units.quantity import _upcast_types
 
 
-IntoModel = Union["Model", Callable[..., Quantity]]
+IntoModel = Union["Model", Callable[..., Quantity], Quantity, float]
 
 
 class Model(ABC):
@@ -26,6 +24,8 @@ class Model(ABC):
     def new(fn: IntoModel) -> "Model":
         if isinstance(fn, Model):
             return fn
+        if isinstance(fn, (Quantity, float)):
+            return ModelFn(lambda: fn * one)
         if callable(fn):
             return ModelFn(fn)
         raise TypeError(f"'{fn!r}' cannot be used as a model")
@@ -426,7 +426,7 @@ class YCorrelatedChiSquared(Cost):
             cov = self.covariance(y, ybar, axis)
             self.inv_cov = numpy.linalg.inv(cov)
             self.ybar = self.value(ybar, axis)
-            self.ybar = self.value(y, axis)
+            self.y = self.value(y, axis)
         self.data_args = args
 
     def wrapped_model(self, *args):
@@ -451,7 +451,7 @@ class YCorrelatedChiSquared(Cost):
             rbar = self.ybar - ym
             r = self.y - ym
             inv_cov = self.inv_cov
-            chi2 = (self.value(rbar, axis) @ inv_cov @ self.value(r, axis)).sum()
+            chi2 = (rbar @ inv_cov @ r).sum()
             try:
                 return chi2.in_unit(one)
             except AttributeError:
