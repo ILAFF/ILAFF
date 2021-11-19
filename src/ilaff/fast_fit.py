@@ -1,33 +1,27 @@
 from abc import ABC, abstractmethod
-from functools import partial, wraps
-from iminuit import Minuit, describe
-import iminuit.cost
-import resample
+from functools import reduce, wraps
 import functools
+from iminuit import Minuit, describe  # type: ignore
+import iminuit.cost  # type: ignore
 import numpy
-from xarray import Dataset, DataArray, Variable, broadcast
-from typing import Callable, Union, Mapping, Sequence, Any, Tuple, Type, Optional, Iterator, List, Iterable
-from inspect import signature, Signature
-import abc
+from xarray import Dataset, DataArray
+from typing import Callable, Hashable, Union, Mapping, Sequence, Any, Tuple, Type, Optional, Iterator, List, Iterable, Literal, Dict
 import itertools
 from dataclasses import dataclass, field
-from functools import reduce, partial
 from operator import mul
-import pandas
-from numba import jit
+import pandas  # type: ignore
+from numba import jit  # type: ignore
 
-from ilaff.units import Quantity, QuantityIndex, Scalar, one, in_unit
+from ilaff.units import Quantity, QuantityIndex, Scalar, one, in_unit, Physical
 from ilaff.units.quantity import _upcast_types
 
-from ilaff.fit import IntoModel, Model, ModelFn, PartialModel, ScaleModel, AddModel, evaluate, partial, jackknife, value_jack, error_jack, covariance_jack, Cost
+from ilaff.fit import IntoModel, Model, PartialModel, partial, value_jack, covariance_jack
 
 
-class Cost(iminuit.cost.Cost, ABC):
-    @abc.abstractmethod
+class Cost(iminuit.cost.Cost):
     def __init__(self, var: DataArray, model: DataArray, value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray], covariant_dims: Sequence[str] = (), verbose: int = 0):
         pass
 
-    @abc.abstractmethod
     def set_function(self, select: Callable[[DataArray], DataArray], value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray]) -> None:
         pass
 
@@ -155,8 +149,6 @@ class SimpleCorrelatedChiSquared(CorrelatedChiSquared):
             try:
                 inv_cov = numpy.linalg.inv(cov.data.value)
             except:
-                print(args)
-                print(r.data.value)
                 print(cov.data.value)
                 raise
 
@@ -202,7 +194,7 @@ def check_model_units(data: Dataset, var: DataArray, model: IntoModel, kwargs: M
                 (unwrap_xarray(q[0] if isinstance(q, tuple) else q) for q in kwargs.values())
             ) if isinstance(q, Quantity)
         ),
-        None,
+        Physical(),
     )
 
     model = Model.new(model)
@@ -283,38 +275,38 @@ DType = Any
 
 
 # TODO: fix Placeholder * DataArray does not work when not using Quantities
-@dataclass(frozen=True)
-class PartialExpr(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.ExtensionArray, abc.ABC):
+@dataclass(frozen=True)  # type: ignore
+class PartialExpr(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.ExtensionArray, ABC):
     shape: Tuple[int, ...] = ()
 
-    def locals(self) -> Mapping[str, Any]:
+    def locals(self) -> Dict[str, Any]:
         return {}
 
     def params(self) -> List[str]:
         return []
 
-    @abc.abstractmethod
+    @abstractmethod
     def expr(self) -> str:
         pass
 
-    @abc.abstractmethod
+    @abstractmethod
     def __getitem__(self, key: Any) -> "PartialExpr":
         pass
 
-    @abc.abstractmethod
+    @abstractmethod
     def _distribute_func(self, func: Callable, args: Sequence[Any], kwargs: Mapping[str, Any]) -> "PartialExpr":
         pass
 
-    @abc.abstractmethod
+    @abstractmethod
     def _arrays(self) -> Iterable[ArrayLike]:
         pass
 
-    @abc.abstractmethod
+    @abstractmethod
     def astype(self, dtype: DType, order: str = 'K', casting: str = 'unsafe',
                subok: bool = True, copy: bool = True) -> "Quantity":
         pass
 
-    @abc.abstractmethod
+    @abstractmethod
     def _placeholder(self) -> Any:
         pass
 
@@ -326,14 +318,14 @@ class PartialExpr(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.
         return len(self.shape)
 
     @property
-    def size(self) -> Tuple[int, ...]:
+    def size(self) -> int:
         return numpy.broadcast(*self._arrays()).size
 
     def transpose(self, axes: Sequence[int]) -> "PartialExpr":
-        return numpy.transpose(self, axes)
+        return numpy.transpose(self, axes)  # type: ignore
 
     def take(self, indices: ArrayLike, axis: Optional[int] = None,
-             out: Optional["PartialExpr"] = None, mode: str = 'raise') -> "PartialExpr":
+             out: Optional["PartialExpr"] = None, mode: Union[Literal['raise'], Literal['wrap'], Literal['clip']] = 'raise') -> "PartialExpr":
         if out is not None:
             raise ValueError("Cannot modify PartialExpr in-place")
         return numpy.take(self, indices, axis, out, mode)
@@ -360,13 +352,12 @@ class PartialExpr(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.
     @classmethod
     def _from_factorized(cls, values: numpy.ndarray, original: "PartialExpr") -> "PartialExpr":
         try:
-            arr = self.__array__()
+            arr = original.__array__()
         except ValueError:
             raise NotImplementedError("Can't factorize a PartialExpr with free parameters")
         return ValueExpr(arr[values])
 
-    @classmethod
-    def _values_for_factorize(cls, values: numpy.ndarray, original: "PartialExpr") -> "PartialExpr":
+    def _values_for_factorize(self) -> Tuple[numpy.ndarray, float]:
         return numpy.array(self), numpy.nan
 
     def isna(self):
@@ -457,7 +448,7 @@ class PartialExpr(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.
     # ))
 
     def __array_function__(self, func: Callable, types: Iterable[Type],
-                           args: Iterable[Any], kwargs: Mapping[str, Any]) -> Any:
+                           args: Sequence[Any], kwargs: Mapping[str, Any]) -> Any:
         if any((t in self._upcast_types) for t in types):
             return NotImplemented
         if func in self._forbidden_array_funcs:
@@ -468,8 +459,6 @@ class PartialExpr(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.
             return self.ndim
         if func is numpy.size:
             return self.size
-        if func is numpy.alen:
-            return len(self)
         if func in self._reduce_array_funcs:
             assert len(kwargs) == 0
             arrs = [
@@ -497,7 +486,7 @@ class PartialExpr(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.
             return self._distribute_func(func, args, kwargs)
         return FuncExpr(
             ValueExpr(func),
-            [self._wrap(arg) for arg in args],
+            tuple(self._wrap(arg) for arg in args),
             {k: self._wrap(arg) for k, arg in kwargs.items()},
         )
 
@@ -506,7 +495,7 @@ class PartialExpr(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.
             return NotImplemented
         return UFuncExpr(
             ValueExpr(ufunc),
-            [self._wrap(arg) for arg in inputs],
+            tuple(self._wrap(arg) for arg in inputs),
             {k: self._wrap(arg) for k, arg in kwargs.items()},
             method,
         )
@@ -542,7 +531,7 @@ class PartialExpr(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.
 
 @dataclass(frozen=True, init=False)
 class Placeholder(PartialExpr):
-    label: str
+    label: str = ""
 
     def __init__(self, label: str):
         object.__setattr__(self, 'label', label)
@@ -573,7 +562,7 @@ class Placeholder(PartialExpr):
 
 @dataclass(frozen=True, init=False)
 class ValueExpr(PartialExpr):
-    value: Any
+    value: Any = 0
 
     def __init__(self, value: Any):
         object.__setattr__(self, 'value', value)
@@ -582,7 +571,7 @@ class ValueExpr(PartialExpr):
     def _placeholder(self) -> Any:
         return self.value
 
-    def locals(self) -> Mapping[str, Any]:
+    def locals(self) -> Dict[str, Any]:
         return {f"val_{id(self.value)}": self.value}
 
     def expr(self) -> str:
@@ -622,9 +611,9 @@ class ValueExpr(PartialExpr):
 
 @dataclass(frozen=True, init=False)
 class FuncExpr(PartialExpr):
-    func: PartialExpr
-    args: Tuple[PartialExpr, ...]
-    kwargs: Mapping[str, PartialExpr]
+    func: PartialExpr = ValueExpr(lambda: 0)
+    args: Tuple[PartialExpr, ...] = ()
+    kwargs: Mapping[str, PartialExpr] = field(default_factory=lambda: {})
 
     def __init__(self, func: PartialExpr, args: Tuple[PartialExpr, ...], kwargs: Mapping[str, PartialExpr]):
         arrays = [a for params in ((func,), args, kwargs.values()) for param in params for a in param._arrays()]
@@ -658,7 +647,7 @@ class FuncExpr(PartialExpr):
             **{k: v._placeholder() for k, v in self.kwargs.items()},
         )
 
-    def locals(self) -> Mapping[str, Any]:
+    def locals(self) -> Dict[str, Any]:
         l = self.func.locals()
         for arg in itertools.chain(self.args, self.kwargs.values()):
             l.update(arg.locals())
@@ -730,7 +719,7 @@ class FuncExpr(PartialExpr):
 
 @dataclass(frozen=True, init=False)
 class UFuncExpr(FuncExpr):
-    method: str
+    method: str = "exp"
 
     def __init__(self, func: PartialExpr, args: Tuple[PartialExpr, ...], kwargs: Mapping[str, PartialExpr], method: str):
         object.__setattr__(self, "method", method)
@@ -805,7 +794,7 @@ def _get_var(var: Union[str, Callable], data: Dataset) -> DataArray:
     return data[var]
 
 
-def fit_jack(data: Union[Dataset, Tuple[Dataset, ...]], var: Union[str, Callable, Tuple[Union[str, Callable], ...]], model: Union[IntoModel, Tuple[IntoModel]],
+def fit_jack(data: Union[Dataset, Tuple[Dataset, ...]], var: Union[str, Callable, Tuple[Union[str, Callable], ...]], model: Union[IntoModel, Tuple[IntoModel, ...]],
              cost: Type[Cost] = NDCorrelatedChiSquared, dim: str = 'jack', keep: Sequence[str] = (), covariant_dims: Sequence[str] = (), **kwargs) -> Dataset:
     if not isinstance(var, tuple):
         var = (var,)
@@ -819,51 +808,53 @@ def fit_jack(data: Union[Dataset, Tuple[Dataset, ...]], var: Union[str, Callable
         raise ValueError("data and var should be the same length")
 
     model = tuple(Model.new(m) for m in model)
-    var = tuple(_get_var(v, d) for v, d in zip(var, data))
+    data_var = tuple(_get_var(v, d) for v, d in zip(var, data))
 
-    for d, v, m in zip(data, var, model):
+    for d, v, m in zip(data, data_var, model):
         units, unwrapped, limits = check_model_units(d, v, m, kwargs)
 
     if isinstance(keep, str):
         keep = (keep,)
 
     partial_model = tuple(
-        m(**{k: d.get(k, Placeholder(k) * units.get(k, one))
-             for k in describe(m)}) * one
+        Model.new(m)(**{
+            k: d.get(k, Placeholder(k) * units.get(k, one))
+            for k in describe(m)
+        }) * one
         for d, m in zip(data, model)
     )
 
-    for v, m in zip(var, partial_model):
-        m = unwrap_xarray(m)
-        v = unwrap_xarray(v)
-        if v.dimension != m.dimension:
-            raise ValueError(f"Model and data have incompatible mass dimensions: {m.dimension} and {v.dimension}")
-        if v.dimension != Scalar and v.scale != m.scale:
+    for v, m in zip(data_var, partial_model):
+        m_unwrap = unwrap_xarray(m)
+        v_unwrap = unwrap_xarray(v)
+        if v_unwrap.dimension != m_unwrap.dimension:
+            raise ValueError(f"Model and data have incompatible mass dimensions: {m_unwrap.dimension} and {v_unwrap.dimension}")
+        if v_unwrap.dimension != Scalar and v_unwrap.scale != m_unwrap.scale:
             raise ValueError("Mismatched scale for model and data")
 
     costs = tuple(
         cost(
             v, m,
-            value=partial(value_jack, dim=dim),
-            covariance=partial(covariance_jack, dim=dim),
+            value=functools.partial(value_jack, dim=dim),
+            covariance=functools.partial(covariance_jack, dim=dim),
             covariant_dims=covariant_dims,
         )
-        for v, m in zip(var, partial_model)
+        for v, m in zip(data_var, partial_model)
     )
 
-    m = Minuit(sum(c for c in costs), **unwrapped)
+    minuit = Minuit(sum(c for c in costs), **unwrapped)
     for k, v in limits.items():
-        m.limits[k] = v
+        minuit.limits[k] = v
 
     if len(keep) == 0:
-        m.migrad()
+        minuit.migrad()
         # print(f"{tuple(v for v in m.values)} -> {sum(c.__call__(tuple(v for v in m.values)) for c in costs)}")
-        chi2 = m.fval
+        chi2 = minuit.fval
         dof = sum(reduce(mul, (v for k, v in d.dims.items() if k != dim)) for d in data) - len(units)
         # TODO: consider preserving attrs
         return Dataset(
             {
-                k: m.values[k] * units[k] for k in unwrapped.keys()
+                k: minuit.values[k] * units[k] for k in unwrapped.keys()
             },
             attrs={
                 "chi2": chi2,
@@ -873,7 +864,7 @@ def fit_jack(data: Union[Dataset, Tuple[Dataset, ...]], var: Union[str, Callable
     else:
         first_data = data[0]
 
-        def indices(dims: Tuple[str]) -> Iterator[Mapping[str, int]]:
+        def indices(dims: Tuple[str, ...]) -> Iterator[Dict[str, int]]:
             if len(dims) == 0:
                 yield {}
             else:
@@ -882,9 +873,9 @@ def fit_jack(data: Union[Dataset, Tuple[Dataset, ...]], var: Union[str, Callable
                         index[dims[0]] = i
                         yield index
 
-        def fit_at(index: Mapping[str, int]) -> Tuple[DataArray, float]:
+        def fit_at(index: Mapping[str, int]) -> Tuple[Dataset, float]:
             dim_idx = index.get(dim, 0)
-            jack_index = {
+            jack_index: Mapping[Hashable, int] = {
                 k: v
                 for k, v in index.items()
                 if k != dim
@@ -895,32 +886,30 @@ def fit_jack(data: Union[Dataset, Tuple[Dataset, ...]], var: Union[str, Callable
                     lambda var: var.sel({dim: dim_idx}),
                     lambda a, b: covariance_jack(a, b, dim),
                 )
-            m.migrad()
+            minuit.migrad()
             # print(f"{tuple(v for v in m.values)} -> {sum(c.__call__(tuple(v for v in m.values)) for c in costs)}")
             return (
                 Dataset(
                     {
-                        k: m.values[k] * units[k] for k in unwrapped.keys()
+                        k: minuit.values[k] * units[k] for k in unwrapped.keys()
                     },
                 ),
-                m.fval,
+                minuit.fval or 0.0,
             )
 
-        index_iter = iter(indices(keep))
+        index_iter = iter(indices(tuple(keep)))
 
         idx = next(index_iter)
         dof = sum(reduce(mul, (v for k, v in d[idx].dims.items() if k != dim)) for d in data) - len(units)
         result, chi2 = fit_at(idx)
-        result = result.expand_dims({
+        expand: Mapping[Hashable, int] = {
             dim: len(first_data[dim])
             for dim in keep
-        })
+        }
+        result = result.expand_dims(expand)
         for k in unwrapped.keys():
             result[k] = result[k].copy()
-        chi2 = DataArray(chi2).expand_dims({
-            dim: len(first_data[dim])
-            for dim in keep
-        }).copy()
+        chi2 = DataArray(chi2).expand_dims(expand).copy()
         for idx in index_iter:
             result_idx, chi2[idx] = fit_at(idx)
             for k in unwrapped.keys():
