@@ -15,7 +15,7 @@ from numba import jit  # type: ignore
 from ilaff.units import Quantity, QuantityIndex, Scalar, one, in_unit, Physical
 from ilaff.units.quantity import _upcast_types
 
-from ilaff.fit import IntoModel, Model, PartialModel, partial, value_jack, covariance_jack
+from ilaff.fit import IntoModel, Model, PartialModel, partial, jackknife, value_jack, error_jack, covariance_jack
 
 
 class Cost(iminuit.cost.Cost):
