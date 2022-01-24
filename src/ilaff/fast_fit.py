@@ -46,7 +46,7 @@ class Cost(iminuit.cost.Cost):
 # 
 #             chi2 = (r**2 / v).sum()
 #             self.chi2 = in_unit(chi2, one).data
-#             self.fn = in_unit(chi2, one).data.compile()
+#             self.fn = in_unit(chi2, one).data.simplify().compile()
 #         else:
 #             r = self.residual.stack(covariant_dims=covariant_dims)
 #             rbar = value(r.expand_dims('covariant_dims_2', -2))
@@ -55,7 +55,7 @@ class Cost(iminuit.cost.Cost):
 #             inv_cov = numpy.linalg.inv(cov.data)
 #             chi2 = numpy.sum(rbar.data @ inv_cov @ r.data)
 #             self.chi2 = in_unit(chi2, one).data
-#             self.fn = in_unit(chi2, one).data.compile()
+#             self.fn = in_unit(chi2, one).data.simplify().compile()
 # 
 #     def _call(self, args) -> float:
 #         return self.fn(*args)
@@ -80,7 +80,7 @@ class CorrelatedChiSquared(Cost):
 class NDCorrelatedChiSquared(CorrelatedChiSquared):
     def set_function(self, select: Callable[[DataArray], DataArray], value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray]) -> None:
         residual_pfunc = select(self.var - self.model)
-        residual_compiled = residual_pfunc.data.value.compile()
+        residual_compiled = residual_pfunc.data.value.simplify().compile()
         if len(self.covariant_dims) == 0:
             @wraps(residual_compiled)
             def chi2(*args):
@@ -126,7 +126,7 @@ class NDCorrelatedChiSquared(CorrelatedChiSquared):
 class SimpleCorrelatedChiSquared(CorrelatedChiSquared):
     def set_function(self, select: Callable[[DataArray], DataArray], value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray]) -> None:
         residual_pfunc = value(select(self.var - self.model))
-        residual_compiled = residual_pfunc.data.value.compile()
+        residual_compiled = residual_pfunc.data.value.simplify().compile()
         if len(self.covariant_dims) == 0:
             var = select(self.var)
             v = covariance(var, var)
@@ -310,6 +310,10 @@ class PartialExpr(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.
     def _placeholder(self) -> Any:
         pass
 
+    @abstractmethod
+    def simplify(self) -> "PartialExpr":
+        pass
+
     def __len__(self) -> int:
         return self.shape[0]
 
@@ -375,7 +379,7 @@ class PartialExpr(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.
         return bool(arr)
 
     @staticmethod
-    def _wrap(value) -> "PartialExpr":
+    def _wrap(value: Any) -> "PartialExpr":
         if isinstance(value, PartialExpr):
             return value
         return ValueExpr(value)
@@ -529,6 +533,30 @@ class PartialExpr(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.
         return local['fn']
 
 
+class ZeroExpr(PartialExpr):
+    def expr(self) -> str:
+        return '0.0'
+
+    def __getitem__(self, key: Any) -> "PartialExpr":
+        return self
+
+    def _distribute_func(self, func: Callable, args: Sequence[Any], kwargs: Mapping[str, Any]) -> "PartialExpr":
+        return ZeroExpr()
+
+    def _arrays(self) -> Iterable[ArrayLike]:
+        return ()
+
+    def astype(self, dtype: DType, order: str = 'K', casting: str = 'unsafe',
+               subok: bool = True, copy: bool = True) -> "Quantity":
+        return ZeroExpr()
+
+    def _placeholder(self) -> Any:
+        return 0.0
+
+    def simplify(self) -> "PartialExpr":
+        return self
+
+
 @dataclass(frozen=True, init=False)
 class Placeholder(PartialExpr):
     label: str = ""
@@ -558,6 +586,9 @@ class Placeholder(PartialExpr):
     def astype(self, dtype: DType, order: str = 'K', casting: str = 'unsafe',
                subok: bool = True, copy: bool = True) -> "Quantity":
         return Placeholder(self.label)
+
+    def simplify(self) -> "PartialExpr":
+        return self
 
 
 @dataclass(frozen=True, init=False)
@@ -607,6 +638,11 @@ class ValueExpr(PartialExpr):
                 return ValueExpr(self.value.copy())
             return self
         return ValueExpr(self.value.astype(dtype, order=order, casting=casting, subok=subok, copy=copy))
+
+    def simplify(self) -> "PartialExpr":
+        if numpy.count_nonzero(self.value) == 0:
+            return ZeroExpr(self.shape)
+        return self
 
 
 @dataclass(frozen=True, init=False)
@@ -716,6 +752,60 @@ class FuncExpr(PartialExpr):
             },
         )
 
+    def simplify(self) -> "PartialExpr":
+        args = tuple(a.simplify() for a in self.args)
+        kwargs = {k: a.simplify() for k, a in self.kwargs.items()}
+        if isinstance(self.func, ValueExpr):
+            if self.func.value == numpy.add:
+                if len(kwargs) == 0 and len(args) == 2:
+                    if isinstance(args[0], ZeroExpr):
+                        return args[1]
+                    elif isinstance(args[1], ZeroExpr):
+                        return args[0]
+            elif self.func.value == numpy.subtract:
+                if len(kwargs) == 0 and len(args) == 2:
+                    if isinstance(args[0], ZeroExpr):
+                        return -args[1]
+                    elif isinstance(args[1], ZeroExpr):
+                        return args[0]
+            elif self.func.value == numpy.negative or self.func.value == numpy.positive:
+                if len(kwargs) == 0 and len(args) == 1:
+                    if isinstance(args[0], ZeroExpr):
+                        return ZeroExpr()
+            elif self.func.value == numpy.multiply:
+                if len(kwargs) == 0 and len(args) == 2:
+                    if isinstance(args[0], ZeroExpr) or isinstance(args[1], ZeroExpr):
+                        return ZeroExpr()
+                    elif isinstance(args[0], ValueExpr) and numpy.count_nonzero(args[0].value - 1) == 0:
+                        return args[1]
+                    elif isinstance(args[1], ValueExpr) and numpy.count_nonzero(args[1].value - 1) == 0:
+                        return args[0]
+            elif self.func.value == numpy.true_divide:
+                if len(kwargs) == 0 and len(args) == 2:
+                    if isinstance(args[0], ZeroExpr):
+                        return ZeroExpr()
+                    elif isinstance(args[1], ValueExpr) and numpy.count_nonzero(args[1].value - 1) == 0:
+                        return args[0]
+            elif self.func.value == numpy.power:
+                if len(kwargs) == 0 and len(args) == 2:
+                    if isinstance(args[0], ZeroExpr):
+                        return ZeroExpr()
+                    elif isinstance(args[1], ZeroExpr):
+                        return ValueExpr(1)
+            elif self.func.value == numpy.exp:
+                if len(kwargs) == 0 and len(args) == 1:
+                    if isinstance(args[0], ZeroExpr):
+                        return ValueExpr(1)
+            elif self.func.value == numpy.sin:
+                if len(kwargs) == 0 and len(args) == 1:
+                    if isinstance(args[0], ZeroExpr):
+                        return ZeroExpr()
+            elif self.func.value == numpy.cos:
+                if len(kwargs) == 0 and len(args) == 1:
+                    if isinstance(args[0], ZeroExpr):
+                        return ValueExpr(1)
+        return FuncExpr(self.func, args, kwargs)
+
 
 @dataclass(frozen=True, init=False)
 class UFuncExpr(FuncExpr):
@@ -785,6 +875,15 @@ class UFuncExpr(FuncExpr):
             },
             self.method,
         )
+
+    def simplify(self) -> "PartialExpr":
+        if self.method == "__call__":
+            simplified = super().simplify()
+            if isinstance(simplified, FuncExpr):
+                return UFuncExpr(simplified.func, simplified.args, simplified.kwargs, self.method)
+            else:
+                return simplified
+        return self
 
 
 def _get_var(var: Union[str, Callable], data: Dataset) -> DataArray:

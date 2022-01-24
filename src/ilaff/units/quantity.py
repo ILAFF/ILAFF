@@ -1010,13 +1010,13 @@ class QuantityIndex(Quantity, pandas.Index):
     #         self.scale,
     #     )
 
-    def set_names(self, names: Union[str, Sequence[str]], level: Optional[Union[int, str, Sequence[Union[int, str]]]] = None, inplace: bool = False) -> "QuantityIndex":
+    def set_names(self, names: Union[str, Sequence[str]], *, level: Optional[Union[int, str, Sequence[Union[int, str]]]] = None, inplace: bool = False) -> "QuantityIndex":
         if inplace:
-            self.value.set_names(names, level, inplace=True)
+            self.value.set_names(names, level=level, inplace=True)
             return self
         else:
             return QuantityIndex(
-                self.value.set_names(names, level, inplace=False),
+                self.value.set_names(names, level=level, inplace=False),
                 self.dimension,
                 self.scale,
                 self._dtype,
