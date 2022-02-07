@@ -15,7 +15,7 @@ from numba import jit  # type: ignore
 from ilaff.units import Quantity, QuantityIndex, Scalar, one, in_unit, Physical
 from ilaff.units.quantity import _upcast_types
 
-from ilaff.fit import IntoModel, Model, PartialModel, partial, jackknife, value_jack, error_jack, covariance_jack
+from ilaff.fit import IntoModel, Model, ModelFn, PartialModel, partial, jackknife, value_jack, error_jack, covariance_jack
 
 
 class Cost(iminuit.cost.Cost):
@@ -886,7 +886,7 @@ class UFuncExpr(FuncExpr):
         return self
 
 
-def _get_var(var: Union[str, Callable], data: Dataset) -> DataArray:
+def get_var(var: Union[str, Callable], data: Dataset) -> DataArray:
     if callable(var):
         sig = describe(var)
         return var(*(data[v] for v in sig))
@@ -907,7 +907,7 @@ def fit_jack(data: Union[Dataset, Tuple[Dataset, ...]], var: Union[str, Callable
         raise ValueError("data and var should be the same length")
 
     model = tuple(Model.new(m) for m in model)
-    data_var = tuple(_get_var(v, d) for v, d in zip(var, data))
+    data_var = tuple(get_var(v, d) for v, d in zip(var, data))
 
     for d, v, m in zip(data, data_var, model):
         units, unwrapped, limits = check_model_units(d, v, m, kwargs)
