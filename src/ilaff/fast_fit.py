@@ -71,10 +71,14 @@ class CorrelatedChiSquared(Cost):
 
         args = describe(self.fn)
 
-        iminuit.cost.Cost.__init__(self, args, len(self.var - self.model), verbose)
+        iminuit.cost.Cost.__init__(self, args, verbose)
 
     def _call(self, args) -> float:
         return self.fn(*args)
+
+    @property
+    def ndata(self) -> int:
+        return len(self.var - self.model)
 
 
 class NDCorrelatedChiSquared(CorrelatedChiSquared):
