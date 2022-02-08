@@ -43,6 +43,11 @@ class Model(ABC):
             for key in signature(self).parameters.keys()
             if key not in kwargs and any(key in d for d in data)
         }
+        kwargs = {
+            key: kwargs[key]
+            for key in signature(self).parameters.keys()
+            if key in kwargs
+        }
         return PartialModel(self, {**kwargs, **data_args})
 
     def __neg__(self) -> "Model":
