@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from iminuit import Minuit, describe  # type: ignore
 import iminuit.cost  # type: ignore
-import resample  # type: ignore
+import resample.jackknife  # type: ignore
 import numpy
 from xarray import Dataset, DataArray
 from typing import Callable, Hashable, Union, Mapping, Dict, Sequence, Any, Tuple, Type, Optional, Iterator, Iterable, List, AbstractSet, TypeVar
