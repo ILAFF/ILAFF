@@ -262,7 +262,6 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.Ext
 
         unit = one
         for lbl, u in _units.items():
-            print(lbl, string[-len(lbl):])
             if string[-len(lbl):] == lbl:
                 unit = u
                 string = string[:-len(lbl)].strip()
