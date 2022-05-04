@@ -1129,13 +1129,13 @@ def _array_func(func: Callable) -> Callable[[Callable], Callable]:
                     argument
                     for arguments in (
                         [arg]
-                        if annotation[name] is Quantity else
+                        if annotation[name] == Quantity else
                         arg
-                        if annotation[name] is Sequence[Quantity] else
-                        arg.keys()
-                        if annotation[name] is Mapping[str, Quantity] else
+                        if annotation[name] == Sequence[Quantity] else
+                        arg.values()
+                        if annotation[name] == Mapping[str, Quantity] else
                         ([] if arg is None else [arg])
-                        if annotation[name] is Optional[Quantity] else
+                        if annotation[name] == Optional[Quantity] else
                         []
                         for name, arg in bound.arguments.items()
                     )
@@ -1148,14 +1148,14 @@ def _array_func(func: Callable) -> Callable[[Callable], Callable]:
             unwrapped_arguments: MutableMapping[str, Any] = {}
             for name, arg in bound.arguments.items():
                 ann = annotation[name]
-                if ann is Quantity:
+                if ann == Quantity:
                     if isinstance(arg, Quantity):
                         wrapped_arguments[name] = arg
                         unwrapped_arguments[name] = arg.value
                     else:
                         wrapped_arguments[name] = Quantity(arg, Scalar, scale)
                         unwrapped_arguments[name] = arg
-                elif ann is Optional[Quantity]:
+                elif ann == Optional[Quantity]:
                     if arg is None:
                         wrapped_arguments[name] = arg
                         unwrapped_arguments[name] = arg
@@ -1165,14 +1165,14 @@ def _array_func(func: Callable) -> Callable[[Callable], Callable]:
                     else:
                         wrapped_arguments[name] = Quantity(arg, Scalar, scale)
                         unwrapped_arguments[name] = arg
-                elif ann is Sequence[Quantity]:
+                elif ann == Sequence[Quantity]:
                     wrapped_arguments[name], unwrapped_arguments[name] = zip(*(
                         (a, a.value)
                         if isinstance(a, Quantity) else
                         (Quantity(a, Scalar, scale), a)
                         for a in arg
                     ))
-                elif ann is Mapping[str, Quantity]:
+                elif ann == Mapping[str, Quantity]:
                     wrapped_arguments[name], unwrapped_arguments[name] = map(dict, zip(*(
                         ((key, a), (key, a.value))
                         if isinstance(a, Quantity) else
@@ -1190,12 +1190,12 @@ def _array_func(func: Callable) -> Callable[[Callable], Callable]:
             result = func(*unwrapped.args, **unwrapped.kwargs)
             if output is None:
                 return result
-            if type(output) is tuple:
+            if type(output) == tuple:
                 return Quantity(result, *output)
-            if type(result) is tuple:
+            if type(result) == tuple:
                 if len(output) == len(result):
                     return tuple(r if o is None else Quantity(r, *o) for r, o in zip(result, output))
-            elif type(result) is list:
+            elif type(result) == list:
                 if len(output) == len(result):
                     return [r if o is None else Quantity(r, *o) for r, o in zip(result, output)]
             else:
