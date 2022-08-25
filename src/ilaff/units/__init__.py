@@ -14,11 +14,11 @@ Examples:
     >>> str(0.0046 * fm**2)
     '0.0046 fm^2'
     >>> import numpy
-    >>> latt = Lattice()
+    >>> latt = Lattice('test')
     >>> str(0.068 / a(latt))
     '0.068 a^-1'
     >>> numpy.arange(0, 2) * a(latt)
-    Quantity(value=array([0., 1.]), dimension=Dimension(mass_dim=-1), scale=Lattice())
+    Quantity(value=array([0., 1.]), dimension=Dimension(mass_dim=-1), scale=Lattice(identifier='test'))
 
 
 To load values in lattice units directly into physical units based on a known
