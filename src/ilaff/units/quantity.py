@@ -57,7 +57,7 @@ def _match_units(func: Callable, *inputs: Union["Quantity", "QuantityIndex"], la
                  offset: int = 0, argument: str = "argument") -> Tuple[Dimension, Scale]:
     for x in inputs:
         try:
-            if x.value != 0:
+            if numpy.any(x.value != 0):
                 dimension = x.dimension
                 scale = x.scale
                 break
@@ -70,14 +70,14 @@ def _match_units(func: Callable, *inputs: Union["Quantity", "QuantityIndex"], la
         scale = inputs[0].scale
     for i, x in enumerate(inputs):
         try:
-            if x.value == 0:
+            if not numpy.any(x.value != 0):
                 continue
         except:
             pass
         if x.dimension != dimension:
             raise ValueError(
                 f"Invalid mass dimension for {_argument_name(i, labels, offset, argument)}"
-                f" of {func.__name__}: got {x.dimension}, expected {dimension}"
+                f" of {func.__name__}: got {x.dimension}, expected {dimension}. \n {inputs}"
             )
         if x.dimension != Scalar and x.scale != scale:
             raise ValueError(
@@ -1213,7 +1213,6 @@ def _einsum_func(func: Callable) -> Callable[[Callable], Callable]:
     def decorator(unit_map: Callable) -> Callable:
         def wrapper(args: Iterable[Any], kwargs: Mapping[str, Any]) -> Any:
             operands = args
-            print(operands)
             try:
                 scale = next(iter(
                     argument
@@ -1221,6 +1220,7 @@ def _einsum_func(func: Callable) -> Callable[[Callable], Callable]:
                     if argument is not None and isinstance(argument, Quantity)
                 )).scale
             except StopIteration:
+                print(operands)
                 raise TypeError(f"Unexpected Quantity passed to {func.__name__}")
 
             unwrapped = [

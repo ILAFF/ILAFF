@@ -1,9 +1,11 @@
 from abc import ABC, abstractmethod
+from re import I
 from iminuit import Minuit, describe  # type: ignore
 import iminuit.cost  # type: ignore
 import resample.jackknife  # type: ignore
+import resample.bootstrap  # type: ignore
 import numpy
-from xarray import Dataset, DataArray
+from xarray import Dataset, DataArray, concat
 from typing import Callable, Hashable, Union, Mapping, Dict, Sequence, Any, Tuple, Type, Optional, Iterator, Iterable, List, AbstractSet, TypeVar
 from inspect import signature, Signature
 import abc
@@ -163,17 +165,11 @@ def partial(model: IntoModel, *data: Dataset, **kwargs: Union[DataArray, Quantit
 T = TypeVar("T", Dataset, DataArray)
 
 
-def jackknife(
-        data: T,
-        dim: str = 'configuration',
-        jackdim: Union[str, Sequence[str]] = 'jack',
-        fn: Callable[[numpy.ndarray], numpy.ndarray] = lambda v: numpy.mean(v, axis=0),
+def resampling_bin(
+        dim: str,
+        n_conf: int,
         bin_width: Optional[int] = None,
-        n_bins: Optional[int] = None) -> T:
-    if isinstance(jackdim, str):
-        jackdim = [jackdim]
-    data = data.transpose(dim, *(d for d in data.dims if d != dim))
-
+        n_bins: Optional[int] = None) -> Callable[[DataArray], DataArray]:
     if bin_width is not None and n_bins is not None:
         raise ValueError("Only one of bin_width and n_bins should be set")
     if n_bins is None:
@@ -183,96 +179,152 @@ def jackknife(
             _bin_width = bin_width
         if _bin_width < 1:
             raise ValueError("Bin width must be at least one")
-        if len(data[dim]) < _bin_width * 2:
-            raise ValueError("Insufficient configurations for jackknife")
+        if n_conf < _bin_width * 2:
+            raise ValueError("Insufficient configurations for binning")
 
         if _bin_width == 1:
-            def jackknife_data(v: numpy.ndarray) -> numpy.ndarray:
+            def binned_data(v: DataArray) -> DataArray:
                 return v
+            return binned_data
         else:
-            def jackknife_data(v: numpy.ndarray) -> numpy.ndarray:
-                return numpy.add.reduceat(
-                    v,
-                    range(0, v.shape[0], _bin_width),
-                    axis=0,
-                )[:(-1 if v.shape[0] % _bin_width != 0 else None)] / _bin_width
+            groups = DataArray([
+                i // _bin_width if i // _bin_width < n_conf // _bin_width else numpy.NaN
+                for i in range(n_conf)
+            ], dims=(dim,))
+
+            def binned_data(v: DataArray) -> DataArray:
+                return v.groupby(groups).mean(dim).rename(group=dim)
+            return binned_data
     else:
-        n_conf = len(data[dim])
         if n_bins > n_conf:
-            raise ValueError("Insufficient configurations for jackknife")
+            raise ValueError("Insufficient configurations for binning")
 
-        def gen_jack_ind(n_conf: int, n_bins: int) -> Iterable[int]:
-            last_idx = 0
-            for conf_idx in range(n_conf):
-                jack_idx = ((conf_idx * n_bins) // n_conf) % n_bins + 1
-                if jack_idx != last_idx:
-                    last_idx = jack_idx
-                    yield conf_idx
+        groups = DataArray([
+            ((i * n_bins) // n_conf) % n_bins + 1
+            for i in range(n_conf)
+        ], dims=(dim,))
+        def binned_data(v: DataArray) -> DataArray:
+            return v.groupby(groups).mean(dim).rename(group=dim)
+        return binned_data
 
-        jack_ind = list(gen_jack_ind(n_conf, n_bins))
 
-        def jackknife_data(v: numpy.ndarray) -> numpy.ndarray:
-            return numpy.add.reduceat(
-                v,
-                jack_ind,
-                axis=0,
-            ) / numpy.add.reduceat(
-                numpy.ones_like(v),
-                jack_ind,
-                axis=0,
-            )
+def jackknife(
+        data: T,
+        dim: str = 'configuration',
+        jackdim: Union[str, Sequence[str]] = 'jack',
+        fn: Optional[Callable[[DataArray], DataArray]] = None,
+        bin_width: Optional[int] = None,
+        n_bins: Optional[int] = None) -> T:
+    if fn is not None:
+        f = fn
+    else:
+        f = lambda v: v.mean(dim)
+    if isinstance(jackdim, str):
+        jackdim = [jackdim]
+    binned_data = resampling_bin(dim, len(data[dim]), bin_width, n_bins)
 
-    def jackknifed(v: numpy.ndarray, jackdims: List[str], njack: Optional[int] = None,
-                   skip: AbstractSet[int] = frozenset()) -> numpy.ndarray:
+    def jackknifed(v: DataArray, jackdims: List[str], njack: Optional[int] = None,
+                   skip: AbstractSet[int] = frozenset()) -> DataArray:
         if len(jackdims) == 0:
-            return fn(v)
+            return f(v)
+        v = v.transpose(dim, ...)
         if njack is None:
             njack = v.shape[0]
         reduced_dims = jackdims[1:]
         full = jackknifed(v, reduced_dims, njack, skip)
         samples = iter(resample.jackknife.resample(
-            v,
+            v.data,
             copy=False,
         ))
-        return numpy.stack(
+        coords = iter(resample.jackknife.resample(
+            v[dim].data,
+            copy=False,
+        ))
+        return concat(
             [full]
             + [
                 numpy.nan * full if i in skip else
-                jackknifed(next(samples), reduced_dims, njack, skip | frozenset((i,)))
+                jackknifed(DataArray(
+                    next(samples),
+                    coords={dim: next(coords), **{key: val for key, val in v.coords.items() if key != dim}},
+                    dims=v.dims,
+                    name=v.name,
+                    attrs=v.attrs,
+                ), reduced_dims, njack, skip | frozenset((i,)))
                 for i in range(njack)
-            ]
+            ],
+            dim=jackdims[0],
         )
 
     if isinstance(data, Dataset):
         # TODO: consider if bin should always average
-        jack = {
-            k: (#Variable(
-                list(jackdim) + [d for d in v.dims if d != dim],
-                jackknifed(jackknife_data(v.data), list(jackdim))
-                #v.attrs,
-                #v.encoding,
-            ) if dim in v.dims else v
-            for k, v in data.variables.items()
-            if k != dim
-        }
-
-        # TODO: figure out how to use variables directly here
         d = Dataset(
-            {k: jack[k] for k in data},
-            coords={k: jack[k] for k in data.coords if k != dim},
+            {k: jackknifed(binned_data(v), list(jackdim)) if dim in v.dims else v for k, v in data.data_vars.items()},
+            coords={k: v for k, v in data.coords.items() if k != dim},
             attrs=data.attrs,
         )
 
         return d
     else:
-        jackdims: List[Hashable] = list(jackdim)
-        return DataArray(
-            data=jackknifed(jackknife_data(data.data), list(jackdim)),
-            coords=data.coords,
-            dims=jackdims + [d for d in data.dims if d != dim],
-            name=data.name,
+        return jackknifed(binned_data(data), list(jackdim))
+
+def bootstrap(
+        data: T,
+        dim: str = 'configuration',
+        bootdim: Union[str, Sequence[str]] = 'boot',
+        fn: Optional[Callable[[DataArray], DataArray]] = None,
+        bin_width: Optional[int] = None,
+        n_bins: Optional[int] = None,
+        n_boot: int = 100,
+        seed: Optional[int] = None) -> T:
+    if fn is not None:
+        f = fn
+    else:
+        f = lambda v: v.mean(dim)
+    if isinstance(bootdim, str):
+        bootdim = [bootdim]
+    else:
+        bootdim = list(bootdim)
+    binned_data = resampling_bin(dim, len(data[dim]), bin_width, n_bins)
+
+    rng = numpy.random.default_rng(seed)
+
+    def bootstrapped(v: DataArray, bootdims: List[str]) -> DataArray:
+        if len(bootdims) == 0:
+            return f(v)
+        reduced_dims = bootdims[1:]
+        full = bootstrapped(v, reduced_dims)
+        samples = iter(resample.bootstrap.resample(
+            v.data,
+            size=n_boot,
+            random_state=rng,
+        ))
+        return concat(
+            [full]
+            + [
+                bootstrapped(DataArray(
+                    sample,
+                    coords={key: val for key, val in v.coords.items() if key != dim},
+                    dims=v.dims,
+                    name=v.name,
+                    attrs=v.attrs,
+                 ), reduced_dims)
+                for sample in samples
+            ],
+            dim=bootdims[0],
+        )
+
+    if isinstance(data, Dataset):
+        # TODO: consider if bin should always average
+        d = Dataset(
+            {k: bootstrapped(binned_data(v), list(bootdim)) if dim in v.dims else v for k, v in data.data_vars.items()},
+            coords={k: v for k, v in data.coords.items() if k != dim},
             attrs=data.attrs,
         )
+
+        return d
+    else:
+        return bootstrapped(binned_data(data), list(bootdim))
 
 
 
@@ -301,7 +353,7 @@ def _unwrap_quantity(quantity: Optional[Union[Quantity, DataArray]]) -> Any:
             dims=quantity.dims,
             name=quantity.name,
             attrs=quantity.attrs,
-            indexes=quantity.indexes._indexes,
+            indexes=quantity.indexes._indexes,  # type: ignore
         )
     return quantity
 
@@ -322,6 +374,10 @@ class NDCorrelatedChiSquared(Cost):
         self.set_data(data)
 
         iminuit.cost.Cost.__init__(self, [arg for arg in self.args if arg not in data], verbose)
+
+    @property
+    def ndata(self) -> int:
+        return len(self.y)
 
     def set_data(self, data: Dataset) -> None:
         y: Union[Quantity, DataArray]
@@ -409,6 +465,10 @@ class YCorrelatedChiSquared(Cost):
         self.set_data(data)
 
         iminuit.cost.Cost.__init__(self, [arg for arg in self.args if arg not in data], verbose)
+
+    @property
+    def ndata(self) -> int:
+        return len(self.y)
 
     def set_data(self, data: Dataset) -> None:
         y: Union[Quantity, DataArray]
@@ -577,6 +637,8 @@ def check_model_units(data: Dataset, var: Union[str, Callable], model: IntoModel
     ym = unwrap_xarray(model(*args))
     if not isinstance(ym, Quantity):
         ym = ym * one
+    if not isinstance(y, Quantity):
+        y = y * one
     if y.dimension != ym.dimension:
         raise ValueError(f"Model and data have incompatible mass dimensions: {ym.dimension} and {y.dimension}")
     if y.dimension != Scalar and y.scale != ym.scale:
@@ -609,6 +671,27 @@ def covariance_jack(v: DataArray, w: DataArray, dim: str = 'jack') -> DataArray:
     N = vbar.count(dim)
     return ((vbar - vbar.mean(dim)) * (wbar - wbar.mean(dim))).sum(dim) * (N - 1) / N
 
+
+def value_boot(v: DataArray, dim: str = 'boot') -> DataArray:
+    return v.isel({dim: 0})
+
+
+def error_boot(v: DataArray, dim: str = 'boot') -> DataArray:
+    vbar = v.isel({dim: slice(1, None)})
+    N = vbar.count(dim)
+    return (((vbar - vbar.mean(dim))**2).sum(dim) / N)**0.5
+
+
+def bootstrap_mean(v: DataArray, dim: str = 'boot') -> DataArray:
+    vbar = v.isel({dim: slice(1, None)})
+    return vbar.mean(dim)
+
+
+def covariance_boot(v: DataArray, w: DataArray, dim: str = 'boot') -> DataArray:
+    vbar = v.isel({dim: slice(1, None)})
+    wbar = w.isel({dim: slice(1, None)})
+    N = vbar.count(dim)
+    return ((vbar - vbar.mean(dim)) * (wbar - wbar.mean(dim))).sum(dim) / N
 
 def expand_dims(v: DataArray, d: Dataset, dim: str, new_dim: str) -> DataArray:
     rename: Mapping[Hashable, Hashable] = {dim: new_dim}

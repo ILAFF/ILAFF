@@ -168,7 +168,7 @@ def test_cmp() -> None:
 
     t_phys = t_current.set_scale(units.a(latt), 0.0913 * units.fm)
 
-    for other in (t_phys, m_pi_squared, m_N, 0.0):
+    for other in (t_phys, m_pi_squared, m_N):
         with pytest.raises(ValueError):
             t_current == other
 
