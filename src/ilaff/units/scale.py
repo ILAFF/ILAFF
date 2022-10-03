@@ -34,7 +34,7 @@ class Lattice(Scale):
 
 MeV = Quantity(0.001, Mass, Physical())
 GeV = Quantity(1.0, Mass, Physical())
-fm = Quantity(1.0 / 0.1973269788, Length, Physical())
+fm = Quantity(1.0 / 0.197326980459302, Length, Physical())
 one = Quantity(1.0, Scalar, Physical())
 
 

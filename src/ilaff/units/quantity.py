@@ -299,6 +299,11 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.Ext
 
     def in_unit(self, val: Union["Quantity", DataArray]) -> Any:
         try:
+            if self.value == 0.0:
+                return 0.0
+        except:
+            pass
+        try:
             val = val.data
         except AttributeError:
             pass

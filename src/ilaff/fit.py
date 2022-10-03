@@ -1,13 +1,12 @@
 from abc import ABC, abstractmethod
 from re import I
-from iminuit import Minuit, describe  # type: ignore
-import iminuit.cost  # type: ignore
+from iminuit import Minuit, describe, cost  # type: ignore
 import resample.jackknife  # type: ignore
 import resample.bootstrap  # type: ignore
 import numpy
 from xarray import Dataset, DataArray, concat
 from typing import Callable, Hashable, Union, Mapping, Dict, Sequence, Any, Tuple, Type, Optional, Iterator, Iterable, List, AbstractSet, TypeVar
-from inspect import signature, Signature
+from inspect import signature, Parameter, Signature
 import abc
 import itertools
 from dataclasses import dataclass, field
@@ -52,6 +51,12 @@ class Model(ABC):
         }
         return PartialModel(self, {**kwargs, **data_args})
 
+    def with_params(self, params: Sequence[Parameter]) -> "Model":
+        return ParamModel(self, Signature(parameters=params, return_annotation=signature(self).return_annotation))
+
+    def isel(self, **kwargs: int) -> "Model":
+        return ISelModel(self, kwargs)
+
     def __neg__(self) -> "Model":
         return -1 * self
 
@@ -78,6 +83,27 @@ class Model(ABC):
 
     def __truediv__(self, other: Union[Quantity, float]) -> "Model":
         return ScaleModel(1 / other, self)
+
+
+@dataclass(frozen=True)
+class ParamModel(Model):
+    __wrapped__: Model
+    __signature__: Signature
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Quantity:
+        bound = self.__signature__.bind(*args, **kwargs)
+        sig = describe(self.__wrapped__)
+        return self.__wrapped__(*(bound.arguments[k] for k in sig))
+
+
+@dataclass(frozen=True)
+class ISelModel(Model):
+    __wrapped__: Model
+    kwargs: Mapping[str, int]
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Quantity:
+        result = self.__wrapped__(*args, **kwargs)
+        return result.isel(**self.kwargs)
 
 
 @dataclass(frozen=True)
@@ -328,7 +354,7 @@ def bootstrap(
 
 
 
-class Cost(iminuit.cost.Cost, abc.ABC):
+class Cost(cost.Cost, abc.ABC):
     @abstractmethod
     def __init__(self, data: Dataset, var: Union[str, Callable[..., Quantity]], model: Model, units: Mapping[str, Quantity], dim: str,
                  value: Callable[[DataArray, int], DataArray], covariance: Callable[[DataArray, DataArray, int], DataArray],
@@ -373,7 +399,7 @@ class NDCorrelatedChiSquared(Cost):
         self.covariant_dims = covariant_dims
         self.set_data(data)
 
-        iminuit.cost.Cost.__init__(self, [arg for arg in self.args if arg not in data], verbose)
+        cost.Cost.__init__(self, [arg for arg in self.args if arg not in data], verbose)
 
     @property
     def ndata(self) -> int:
@@ -464,7 +490,7 @@ class YCorrelatedChiSquared(Cost):
         self.covariant_dims = covariant_dims
         self.set_data(data)
 
-        iminuit.cost.Cost.__init__(self, [arg for arg in self.args if arg not in data], verbose)
+        cost.Cost.__init__(self, [arg for arg in self.args if arg not in data], verbose)
 
     @property
     def ndata(self) -> int:
@@ -705,9 +731,19 @@ def fit_jack(data: Union[Dataset, Tuple[Dataset, ...]], var: Union[str, Callable
     if isinstance(var, tuple):
         if not isinstance(model, tuple) or len(var) != len(model):
             raise ValueError("model and var should be the same length")
-        model = tuple(
+        raw_model = tuple(
             Model.new(m)
             for m in model
+        )
+        param_map = {
+            k: p
+            for m in raw_model
+            for k, p in signature(m).parameters.items()
+        }
+        params = list(Parameter(k, Parameter.POSITIONAL_OR_KEYWORD, annotation=param_map[k].annotation) for k in set(k for m in raw_model for k in describe(m)))
+        model = tuple(
+            m.with_params(params)
+            for m in raw_model
         )
         if not isinstance(data, tuple):
             data = (data,) * len(var)
