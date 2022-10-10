@@ -898,7 +898,8 @@ def get_var(var: Union[str, Callable], data: Dataset) -> DataArray:
 
 
 def fit_jack(data: Union[Dataset, Tuple[Dataset, ...]], var: Union[str, Callable, Tuple[Union[str, Callable], ...]], model: Union[IntoModel, Tuple[IntoModel, ...]],
-             cost: Type[Cost] = NDCorrelatedChiSquared, dim: str = 'jack', keep: Sequence[str] = (), covariant_dims: Sequence[str] = (), **kwargs) -> Dataset:
+             cost: Type[Cost] = NDCorrelatedChiSquared, dim: str = 'jack', keep: Sequence[str] = (), covariant_dims: Sequence[str] = (),
+             ncall: Optional[int] = None, tol: Optional[float] = None, **kwargs) -> Dataset:
     if not isinstance(var, tuple):
         var = (var,)
     if not isinstance(model, tuple):
@@ -946,11 +947,12 @@ def fit_jack(data: Union[Dataset, Tuple[Dataset, ...]], var: Union[str, Callable
     )
 
     minuit = Minuit(sum(c for c in costs), **unwrapped)
+    minuit.tol = tol
     for k, v in limits.items():
         minuit.limits[k] = v
 
     if len(keep) == 0:
-        minuit.migrad()
+        minuit.migrad(ncall=ncall)
         # print(f"{tuple(v for v in m.values)} -> {sum(c.__call__(tuple(v for v in m.values)) for c in costs)}")
         chi2 = minuit.fval
         dof = sum(reduce(mul, (v for k, v in d.dims.items() if k != dim)) for d in data) - len(units)
@@ -989,7 +991,7 @@ def fit_jack(data: Union[Dataset, Tuple[Dataset, ...]], var: Union[str, Callable
                     lambda var: var.sel({dim: dim_idx}),
                     lambda a, b: covariance_jack(a, b, dim),
                 )
-            minuit.migrad()
+            minuit.migrad(ncall=ncall)
             # print(f"{tuple(v for v in m.values)} -> {sum(c.__call__(tuple(v for v in m.values)) for c in costs)}")
             return (
                 Dataset(
