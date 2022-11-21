@@ -1490,9 +1490,10 @@ def amin(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
             return _match_units(numpy.amin, a, out, initial, labels={1: "'out'", 2: "'initial'"})
 
 
-@_array_func(numpy.alen)  # type: ignore
-def alen(a: Quantity) -> None:
-    return None
+if hasattr(numpy, 'alen'):
+    @_array_func(numpy.alen)  # type: ignore
+    def alen(a: Quantity) -> None:
+        return None
 
 
 @_array_func(numpy.prod)
@@ -2356,9 +2357,10 @@ def real_if_close(a: Quantity, tol: float = 100.) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
-@_array_func(numpy.asscalar)
-def asscalar(a: Quantity) -> Tuple[Dimension, Scale]:
-    return a.dimension, a.scale
+if hasattr(numpy, 'asscalar'):
+    @_array_func(numpy.asscalar)
+    def asscalar(a: Quantity) -> Tuple[Dimension, Scale]:
+        return a.dimension, a.scale
 
 
 @_array_func(numpy.common_type)
