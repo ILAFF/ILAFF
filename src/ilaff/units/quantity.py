@@ -307,6 +307,15 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.Ext
             val = val.data
         except AttributeError:
             pass
+        if val.value == 1.0:
+            if self.dimension != val.dimension:
+                raise ValueError(
+                    "Can't convert units: incompatible mass dimensions {} and {}"
+                    .format(self.dimension.mass_dim, val.dimension.mass_dim)
+                )
+            if self.dimension != Scalar and self.scale != val.scale:
+                raise ValueError("Can't convert units: incompatible scales")
+            return self.value
         try:
             res = self / val
         except ValueError:
@@ -928,6 +937,39 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.Ext
 
 
 def in_unit(val: Any, unit: Union[Quantity, DataArray]) -> Any:
+    try:
+        if val.value == 0.0:
+            return 0.0
+    except:
+        pass
+
+    try:
+        unit = unit.data
+    except AttributeError:
+        pass
+
+    if unit.value == 1.0:
+        try:
+            val_data = val.data
+        except AttributeError:
+            val_data = val
+
+        if not isinstance(val_data, Quantity):
+            return val
+
+        if val_data.dimension != unit.dimension:
+            raise ValueError(
+                "Can't convert units: incompatible mass dimensions {} and {}"
+                .format(val_data.dimension.mass_dim, unit.dimension.mass_dim)
+            )
+        if val_data.dimension != Scalar and val.scale != unit.scale:
+            raise ValueError("Can't convert units: incompatible scales")
+
+        if val_data is val:
+            return val.value
+
+        return val.copy(data=val_data.value)
+
     try:
         result = val / unit
     except ValueError:

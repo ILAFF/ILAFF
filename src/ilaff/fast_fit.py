@@ -64,7 +64,7 @@ class Cost(iminuit.cost.Cost):
 class CorrelatedChiSquared(Cost):
     def __init__(self, var: DataArray, model: DataArray, value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray], covariant_dims: Sequence[str] = (), verbose: int = 0):
         self.var = var
-        self.model = model
+        self.residual = var - model
         self.covariant_dims = covariant_dims
 
         self.set_function(lambda v: v, value, covariance)
@@ -78,12 +78,12 @@ class CorrelatedChiSquared(Cost):
 
     @property
     def ndata(self) -> int:
-        return len(self.var - self.model)
+        return len(self.residual)
 
 
 class NDCorrelatedChiSquared(CorrelatedChiSquared):
     def set_function(self, select: Callable[[DataArray], DataArray], value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray]) -> None:
-        residual_pfunc = select(self.var - self.model)
+        residual_pfunc = select(self.residual)
         residual_compiled = residual_pfunc.data.value.simplify().compile()
         if len(self.covariant_dims) == 0:
             @wraps(residual_compiled)
@@ -129,7 +129,7 @@ class NDCorrelatedChiSquared(CorrelatedChiSquared):
 
 class SimpleCorrelatedChiSquared(CorrelatedChiSquared):
     def set_function(self, select: Callable[[DataArray], DataArray], value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray]) -> None:
-        residual_pfunc = value(select(self.var - self.model))
+        residual_pfunc = value(select(self.residual))
         residual_compiled = residual_pfunc.data.value.simplify().compile()
         if len(self.covariant_dims) == 0:
             var = select(self.var)
@@ -148,7 +148,8 @@ class SimpleCorrelatedChiSquared(CorrelatedChiSquared):
             self.fn = chi2
         else:
             v = select(self.var).stack(covariant_dims=self.covariant_dims)
-            vbar = v.rename(covariant_dims='covariant_dims_2')
+            vbar = v.rename(covariant_dims='covariant_dims_2').expand_dims('covariant_dims', axis=-2)
+            v = v.expand_dims('covariant_dims_2', axis=-1)
             cov = covariance(v, vbar)
             try:
                 inv_cov = numpy.linalg.inv(cov.data.value)

@@ -681,9 +681,24 @@ def value_jack(v: DataArray, dim: str = 'jack') -> DataArray:
 
 
 def error_jack(v: DataArray, dim: str = 'jack') -> DataArray:
-    vbar = v.isel({dim: slice(1, None)})
-    N = vbar.count(dim)
-    return (((vbar - vbar.mean(dim))**2).sum(dim) * (N - 1) / N)**0.5
+    # vbar = v.isel({dim: slice(1, None)})
+    # N = vbar.count(dim)
+    # return (((vbar - vbar.mean(dim))**2).sum(dim) * (N - 1) / N)**0.5
+    idim = v.dims.index(dim)
+    vbar = v.data[(slice(None),)*idim + (slice(1, None), ...)]
+    N = vbar.shape[idim]
+    # var = numpy.sum(
+    #     (vbar - numpy.mean(vbar, axis=idim, keepdims=True))**2,
+    #     axis=idim,
+    # ) * ((N - 1) / N)
+    res = vbar - numpy.mean(vbar, axis=idim, keepdims=True)
+    var = numpy.sum(res * res, axis=idim) * ((N - 1) / N)
+    # return DataArray(
+    #     var**0.5, dims=v.dims[:idim]+v.dims[idim+1:],
+    # )
+    return DataArray(
+        numpy.sqrt(var), dims=v.dims[:idim]+v.dims[idim+1:],
+    )
 
 
 def jack_mean(v: DataArray, dim: str = 'jack') -> DataArray:
@@ -692,10 +707,23 @@ def jack_mean(v: DataArray, dim: str = 'jack') -> DataArray:
 
 
 def covariance_jack(v: DataArray, w: DataArray, dim: str = 'jack') -> DataArray:
-    vbar = v.isel({dim: slice(1, None)})
-    wbar = w.isel({dim: slice(1, None)})
-    N = vbar.count(dim)
-    return ((vbar - vbar.mean(dim)) * (wbar - wbar.mean(dim))).sum(dim) * (N - 1) / N
+    # vbar = v.isel({dim: slice(1, None)})
+    # wbar = w.isel({dim: slice(1, None)})
+    # N = vbar.count(dim)
+    # return ((vbar - vbar.mean(dim)) * (wbar - wbar.mean(dim))).sum(dim) * (N - 1) / N
+    assert v.dims == w.dims
+    idim = v.dims.index(dim)
+    vbar = v.data[(slice(None),)*idim + (slice(1, None), ...)]
+    wbar = w.data[(slice(None),)*idim + (slice(1, None), ...)]
+    N = vbar.shape[idim]
+    cov = numpy.sum(
+        (vbar - numpy.mean(vbar, axis=idim, keepdims=True))
+        *(wbar - numpy.mean(wbar, axis=idim, keepdims=True)),
+        axis=idim,
+    ) * ((N - 1) / N)
+    return DataArray(
+        cov, dims=v.dims[:idim]+v.dims[idim+1:],
+    )
 
 
 def value_boot(v: DataArray, dim: str = 'boot') -> DataArray:
