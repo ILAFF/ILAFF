@@ -405,7 +405,7 @@ class PartialExpr(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.
         numpy.broadcast_to, numpy.broadcast_arrays, numpy.take_along_axis,
         numpy.expand_dims, numpy.column_stack, numpy.dstack,
         numpy.array_split, numpy.split, numpy.hsplit, numpy.vsplit,
-        numpy.dsplit, numpy.tile, numpy.asscalar,
+        numpy.dsplit, numpy.tile,
     ))
     _forbidden_array_funcs = frozenset((
         numpy.min_scalar_type, numpy.copyto, numpy.put,
