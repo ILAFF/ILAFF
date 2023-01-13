@@ -80,6 +80,10 @@ class CorrelatedChiSquared(Cost):
     def ndata(self) -> int:
         return len(self.residual)
 
+    @property
+    def _ndata(self) -> int:
+        return len(self.residual)
+
 
 class NDCorrelatedChiSquared(CorrelatedChiSquared):
     def set_function(self, select: Callable[[DataArray], DataArray], value: Callable[[DataArray], DataArray], covariance: Callable[[DataArray, DataArray], DataArray]) -> None:
