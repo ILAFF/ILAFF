@@ -299,7 +299,7 @@ class PartialExpr(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.
         pass
 
     @abstractmethod
-    def __getitem__(self, key: Any) -> "PartialExpr":
+    def __getitem__(self, key: Any) -> Any:
         pass
 
     @abstractmethod
@@ -311,7 +311,7 @@ class PartialExpr(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.
         pass
 
     @abstractmethod
-    def astype(self, dtype: DType, order: str = 'K', casting: str = 'unsafe',
+    def astype(self, dtype: DType, order: str = 'K', casting: str = 'unsafe',  # type: ignore
                subok: bool = True, copy: bool = True) -> "Quantity":
         pass
 
@@ -337,7 +337,7 @@ class PartialExpr(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.
     def transpose(self, axes: Sequence[int]) -> "PartialExpr":
         return numpy.transpose(self, axes)  # type: ignore
 
-    def take(self, indices: ArrayLike, axis: Optional[int] = None,
+    def take(self, indices: ArrayLike, axis: Optional[int] = None,  # type: ignore
              out: Optional["PartialExpr"] = None, mode: Union[Literal['raise'], Literal['wrap'], Literal['clip']] = 'raise') -> "PartialExpr":
         if out is not None:
             raise ValueError("Cannot modify PartialExpr in-place")
@@ -546,7 +546,7 @@ class ZeroExpr(PartialExpr):
     def expr(self) -> str:
         return '0.0'
 
-    def __getitem__(self, key: Any) -> "PartialExpr":
+    def __getitem__(self, key: Any) -> Any:
         return self
 
     def _distribute_func(self, func: Callable, args: Sequence[Any], kwargs: Mapping[str, Any]) -> "PartialExpr":
@@ -555,8 +555,8 @@ class ZeroExpr(PartialExpr):
     def _arrays(self) -> Iterable[ArrayLike]:
         return ()
 
-    def astype(self, dtype: DType, order: str = 'K', casting: str = 'unsafe',
-               subok: bool = True, copy: bool = True) -> "Quantity":
+    def astype(self, dtype: DType, order: str = 'K', casting: str = 'unsafe',  # type: ignore
+               subok: bool = True, copy: bool = True) -> "ZeroExpr":
         return ZeroExpr()
 
     def _placeholder(self) -> Any:
@@ -583,7 +583,7 @@ class Placeholder(PartialExpr):
     def expr(self) -> str:
         return self.label
 
-    def __getitem__(self, key: Any) -> "PartialExpr":
+    def __getitem__(self, key: Any) -> Any:
         return self
 
     def _distribute_func(self, func: Callable, args: Sequence[Any], kwargs: Mapping[str, Any]) -> "PartialExpr":
@@ -592,8 +592,8 @@ class Placeholder(PartialExpr):
     def _arrays(self) -> Iterable[ArrayLike]:
         return ()
 
-    def astype(self, dtype: DType, order: str = 'K', casting: str = 'unsafe',
-               subok: bool = True, copy: bool = True) -> "Quantity":
+    def astype(self, dtype: DType, order: str = 'K', casting: str = 'unsafe',  # type: ignore
+               subok: bool = True, copy: bool = True) -> "Placeholder":
         return Placeholder(self.label)
 
     def simplify(self) -> "PartialExpr":
@@ -617,7 +617,7 @@ class ValueExpr(PartialExpr):
     def expr(self) -> str:
         return f"val_{id(self.value)}"
 
-    def __getitem__(self, key: Any) -> "PartialExpr":
+    def __getitem__(self, key: Any) -> Any:
         if self.ndim == 0:
             return self
         return ValueExpr(self.value[key])
@@ -625,7 +625,7 @@ class ValueExpr(PartialExpr):
     def _distribute_func(self, func: Callable, args: Sequence[Any], kwargs: Mapping[str, Any]) -> "PartialExpr":
         for arg in itertools.chain(args, kwargs.values()):
             if isinstance(arg, PartialExpr):
-                if (not arg.__class__ is self.__class__) or numpy.ndim(arg.value) != numpy.ndim(self.value):
+                if not isinstance(arg, ValueExpr) or (not arg.__class__ is self.__class__) or numpy.ndim(arg.value) != numpy.ndim(self.value):
                     raise TypeError(f"Inconsistent PartialExprs passed to {func.__name__}")
         # TODO: check this always gets the right ValueExpr
         if self.ndim == 0:
@@ -640,8 +640,8 @@ class ValueExpr(PartialExpr):
             return ()
         return (self.value,)
 
-    def astype(self, dtype: DType, order: str = 'K', casting: str = 'unsafe',
-               subok: bool = True, copy: bool = True) -> "Quantity":
+    def astype(self, dtype: DType, order: str = 'K', casting: str = 'unsafe',  # type: ignore
+               subok: bool = True, copy: bool = True) -> "ValueExpr":
         if numpy.ndim(self.value) == 0:
             if copy:
                 return ValueExpr(self.value.copy())
@@ -709,7 +709,7 @@ class FuncExpr(PartialExpr):
     def expr(self) -> str:
         return f"{self.func.expr()}({', '.join(arg.expr() for arg in self.args)}, {', '.join(f'{k}={v.expr()}' for k, v in self.kwargs.items())})"
 
-    def __getitem__(self, key: Any) -> "PartialExpr":
+    def __getitem__(self, key: Any) -> Any:
         return FuncExpr(
             self.func[key],
             tuple(arg[key] for arg in self.args),
@@ -720,7 +720,7 @@ class FuncExpr(PartialExpr):
     def _distribute_func(self, func: Callable, args: Sequence[Any], kwargs: Mapping[str, Any]) -> "PartialExpr":
         for arg in itertools.chain(args, kwargs.values()):
             if isinstance(arg, PartialExpr):
-                if not arg.__class__ is self.__class__ or len(arg.args) != len(self.args) or set(arg.kwargs.keys()) != set(self.kwargs.keys()):
+                if not isinstance(arg, FuncExpr) or not arg.__class__ is self.__class__ or len(arg.args) != len(self.args) or set(arg.kwargs.keys()) != set(self.kwargs.keys()):
                     raise TypeError(f"Inconsistent PartialExprs passed to {func.__name__}")
         return FuncExpr(
             func(
@@ -747,16 +747,16 @@ class FuncExpr(PartialExpr):
         for arg in itertools.chain((self.func,), self.args, self.kwargs.values()):
             yield from arg._arrays()
 
-    def astype(self, dtype: DType, order: str = 'K', casting: str = 'unsafe',
-               subok: bool = True, copy: bool = True) -> "Quantity":
+    def astype(self, dtype: DType, order: str = 'K', casting: str = 'unsafe',  # type: ignore
+               subok: bool = True, copy: bool = True) -> "FuncExpr":
         return FuncExpr(
-            self.func.astype(dtype, order=order, casting=casting, subok=subok, copy=copy),
+            self.func.astype(dtype, order=order, casting=casting, subok=subok, copy=copy),  # type: ignore
             tuple(
-                arg.astype(dtype, order=order, casting=casting, subok=subok, copy=copy)
+                arg.astype(dtype, order=order, casting=casting, subok=subok, copy=copy)  # type: ignore
                 for arg in self.args
             ),
             {
-                k: v.astype(dtype, order=order, casting=casting, subok=subok, copy=copy)
+                k: v.astype(dtype, order=order, casting=casting, subok=subok, copy=copy)  # type: ignore
                 for k, v in self.kwargs.items()
             },
         )
@@ -835,7 +835,7 @@ class UFuncExpr(FuncExpr):
             return f"{self.func.expr()}({', '.join(arg.expr() for arg in self.args)}, {', '.join(f'{k}={v.expr()}' for k, v in self.kwargs.items())})"
         return f"{self.func.expr()}.{self.method}({', '.join(arg.expr() for arg in self.args)}, {', '.join(f'{k}={v.expr()}' for k, v in self.kwargs.items())})"
 
-    def __getitem__(self, key: Any) -> "PartialExpr":
+    def __getitem__(self, key: Any) -> Any:
         return UFuncExpr(
             self.func[key],
             tuple(arg[key] for arg in self.args),
@@ -846,7 +846,7 @@ class UFuncExpr(FuncExpr):
     def _distribute_func(self, func: Callable, args: Sequence[Any], kwargs: Mapping[str, Any]) -> "PartialExpr":
         for arg in itertools.chain(args, kwargs.values()):
             if isinstance(arg, PartialExpr):
-                if not arg.__class__ is self.__class__ or len(arg.args) != len(self.args) or set(arg.kwargs.keys()) != set(self.kwargs.keys()):
+                if not isinstance(arg, UFuncExpr) or not arg.__class__ is self.__class__ or len(arg.args) != len(self.args) or set(arg.kwargs.keys()) != set(self.kwargs.keys()):
                     raise TypeError(f"Inconsistent PartialExprs passed to {func.__name__}")
         return UFuncExpr(
             func(
@@ -870,16 +870,16 @@ class UFuncExpr(FuncExpr):
             self.method,
         )
 
-    def astype(self, dtype: DType, order: str = 'K', casting: str = 'unsafe',
-               subok: bool = True, copy: bool = True) -> "Quantity":
+    def astype(self, dtype: DType, order: str = 'K', casting: str = 'unsafe',  # type: ignore
+               subok: bool = True, copy: bool = True) -> "UFuncExpr":
         return UFuncExpr(
-            self.func.astype(dtype, order=order, casting=casting, subok=subok, copy=copy),
+            self.func.astype(dtype, order=order, casting=casting, subok=subok, copy=copy),  # type: ignore
             tuple(
-                arg.astype(dtype, order=order, casting=casting, subok=subok, copy=copy)
+                arg.astype(dtype, order=order, casting=casting, subok=subok, copy=copy)  # type: ignore
                 for arg in self.args
             ),
             {
-                k: v.astype(dtype, order=order, casting=casting, subok=subok, copy=copy)
+                k: v.astype(dtype, order=order, casting=casting, subok=subok, copy=copy)  # type: ignore
                 for k, v in self.kwargs.items()
             },
             self.method,
@@ -925,16 +925,16 @@ def fit_jack(data: Union[Dataset, Tuple[Dataset, ...]], var: Union[str, Callable
     if isinstance(keep, str):
         keep = (keep,)
 
-    partial_model = tuple(
-        Model.new(m)(**{
+    partial_model: Sequence[DataArray] = tuple(
+        Model.new(m)(**{  # type: ignore
             k: d.get(k, Placeholder(k) * units.get(k, one))
             for k in describe(m)
         }) * one
         for d, m in zip(data, model)
     )
 
-    for v, m in zip(data_var, partial_model):
-        m_unwrap = unwrap_xarray(m)
+    for v, mm in zip(data_var, partial_model):
+        m_unwrap = unwrap_xarray(mm)
         v_unwrap = unwrap_xarray(v)
         if v_unwrap.dimension != m_unwrap.dimension:
             raise ValueError(f"Model and data have incompatible mass dimensions: {m_unwrap.dimension} and {v_unwrap.dimension}")

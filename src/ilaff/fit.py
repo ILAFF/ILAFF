@@ -26,7 +26,7 @@ class Model(ABC):
         if isinstance(fn, Model):
             return fn
         if isinstance(fn, (Quantity, float)):
-            return ModelFn(lambda: fn * one)
+            return ModelFn(lambda: fn * one)  # type: ignore
         if callable(fn):
             return ModelFn(fn)
         raise TypeError(f"'{fn!r}' cannot be used as a model")
@@ -36,7 +36,7 @@ class Model(ABC):
         ...
 
     def evaluate(self, data: Dataset) -> DataArray:
-        return self(**{key: data[key] for key in signature(self).parameters.keys()})
+        return self(**{key: data[key] for key in signature(self).parameters.keys()})  # type: ignore
 
     def partial(self, *data: Dataset, **kwargs: Union[DataArray, Quantity]) -> "Model":
         data_args = {
@@ -78,7 +78,7 @@ class Model(ABC):
     def __mul__(self, other: Union[Quantity, float]) -> "Model":
         return ScaleModel(other, self)
 
-    def __rmul__(self, other: Union[Quantity, float]) -> "Model":
+    def __rmul__(self, other: float) -> "Model":
         return ScaleModel(other, self)
 
     def __truediv__(self, other: Union[Quantity, float]) -> "Model":
@@ -102,8 +102,8 @@ class ISelModel(Model):
     kwargs: Mapping[str, int]
 
     def __call__(self, *args: Any, **kwargs: Any) -> Quantity:
-        result = self.__wrapped__(*args, **kwargs)
-        return result.isel(**self.kwargs)
+        result: DataArray = self.__wrapped__(*args, **kwargs)  # type: ignore
+        return result.isel(**self.kwargs)  # type: ignore
 
 
 @dataclass(frozen=True)
@@ -111,7 +111,7 @@ class ModelFn(Model):
     __wrapped__: Callable[..., Quantity]
 
     def __call__(self, *args: Any, **kwargs: Any) -> Quantity:
-        return self.__wrapped__(*args, **kwargs)
+        return self.__wrapped__(*args, **kwargs)  # type: ignore
 
 
 @dataclass(frozen=True)
@@ -497,10 +497,10 @@ class YCorrelatedChiSquared(Cost):
         return len(self.y)
 
     def set_data(self, data: Dataset) -> None:
-        y: Union[Quantity, DataArray]
+        y: DataArray
         if callable(self.var):
             sig = describe(self.var)
-            y = self.var(*(data[v] for v in sig))
+            y = self.var(*(data[v] for v in sig))  # type: ignore
         else:
             y = data[self.var]
         args = [

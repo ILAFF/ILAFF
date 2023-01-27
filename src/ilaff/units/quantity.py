@@ -11,8 +11,7 @@ from typing import (
     Type, Callable, Mapping, MutableMapping, Union, Sized, TextIO, BinaryIO, TypeVar,
 )
 import warnings
-import pandas  # type: ignore
-from pandas.util._decorators import cache_readonly  # type: ignore
+import pandas
 
 from .dimension import Dimension, Scalar
 
@@ -270,7 +269,7 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.Ext
         if string[0] == '[' and string[-1] == ']':
             return numpy.array(
                 [float(s) for s in string[1:-1].replace(',', ' ').split()]
-            ) * unit
+            ) * unit  # type: ignore
 
         return float(string) * unit
 
@@ -304,7 +303,7 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.Ext
         except:
             pass
         try:
-            val = val.data
+            val = val.data  # type: ignore
         except AttributeError:
             pass
         if val.value == 1.0:
@@ -349,7 +348,7 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.Ext
     def __len__(self) -> int:
         return len(self.value)
 
-    def __getitem__(self, key: Any) -> "Quantity":
+    def __getitem__(self, key: Any) -> Any:
         return Quantity(
             self.value[key],
             self.dimension,
@@ -557,11 +556,11 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.Ext
                      order: Optional[Union[str, Sequence[str]]] = None) -> numpy.ndarray: ...
 
     @_delegate_to(numpy)
-    def argsort(self, axis: int = -1, kind: Optional[str] = None,
+    def argsort(self, axis: int = -1, kind: Optional[str] = None,  # type: ignore
                 order: Optional[Union[str, Sequence[str]]] = None) -> numpy.ndarray: ...
 
     @_check_implemented
-    def astype(self, dtype: Dtype, order: str = 'K', casting: str = 'unsafe',
+    def astype(self, dtype: Dtype, order: str = 'K', casting: str = 'unsafe',  # type: ignore
                subok: bool = True, copy: bool = True) -> "Quantity":
         return Quantity(
             self.value.astype(dtype, casting=casting, subok=subok, copy=copy),
@@ -594,10 +593,10 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.Ext
     @_delegate_to(numpy)
     def copy(self, order: str = 'K') -> "Quantity": ...
 
-    def __copy__(self) -> "QuantityIndex":
+    def __copy__(self) -> "Quantity":
         return self.copy()
 
-    def __deepcopy__(self, memo: Any = None) -> "QuantityIndex":
+    def __deepcopy__(self, memo: Any = None) -> "Quantity":
         return self.copy()
 
     @_delegate_to(numpy)
@@ -753,7 +752,7 @@ class Quantity(numpy.lib.mixins.NDArrayOperatorsMixin, pandas.api.extensions.Ext
     def swapaxes(self, axis1: int, axis2: int) -> "Quantity": ...
 
     @_delegate_to(numpy)
-    def take(self, indices: ArrayLike, axis: Optional[int] = None,
+    def take(self, indices: ArrayLike, axis: Optional[int] = None,  # type: ignore
              out: Optional["Quantity"] = None, mode: str = 'raise') -> "Quantity": ...
 
     def tolist(self) -> "Quantity":
@@ -944,13 +943,13 @@ def in_unit(val: Any, unit: Union[Quantity, DataArray]) -> Any:
         pass
 
     try:
-        unit = unit.data
+        unit = unit.data  # type: ignore
     except AttributeError:
         pass
 
     if unit.value == 1.0:
         try:
-            val_data = val.data
+            val_data = val.data  # type: ignore
         except AttributeError:
             val_data = val
 
@@ -997,7 +996,7 @@ def _index_method(func: T_Callable) -> T_Callable:
     @wraps(func)
     def fn(self: "QuantityIndex", *args: Any, **kwargs: Any) -> "QuantityIndex":
         return QuantityIndex(
-            getattr(self.index, func.__name__)(*args, **kwargs),
+            getattr(self.value, func.__name__)(*args, **kwargs),
             self.dimension,
             self.scale,
             self.dtype,
@@ -1005,7 +1004,7 @@ def _index_method(func: T_Callable) -> T_Callable:
     return fn  # type: ignore
 
 
-class QuantityIndex(Quantity, pandas.Index):
+class QuantityIndex(Quantity, pandas.Index):  # type: ignore
     def __new__(cls, index: pandas.Index, dimension: Dimension, scale: Scale, dtype: Dtype) -> Any:
         return Quantity.__new__(cls)
 
@@ -1021,7 +1020,7 @@ class QuantityIndex(Quantity, pandas.Index):
         return f"{class_name}({args})"
 
     @property
-    def array(self) -> numpy.ndarray:
+    def array(self) -> Any:
         return numpy.array(self.value.array, dtype=self._dtype)
 
     @property
@@ -1029,7 +1028,7 @@ class QuantityIndex(Quantity, pandas.Index):
         return self.value.dtype
 
     @property
-    def values(self) -> Quantity:
+    def values(self) -> Any:
         return Quantity(
                 self.value.values,
             self.dimension,
@@ -1037,7 +1036,7 @@ class QuantityIndex(Quantity, pandas.Index):
         )
 
     @_index_method
-    def astype(self, dtype: Dtype, order: str = 'K', casting: str = 'unsafe',
+    def astype(self, dtype: Dtype, order: str = 'K', casting: str = 'unsafe',  # type: ignore
                subok: bool = True, copy: bool = True) -> Quantity: ...
 
     # def take(self, indices: ArrayLike, axis: int = 0, allow_fill: bool = True, fill_value: Optional[Quantity] = None, **kwargs: Any) -> Quantity:
@@ -1068,7 +1067,7 @@ class QuantityIndex(Quantity, pandas.Index):
                 self._dtype,
             )
 
-    def __getitem__(self, key: Any) -> Union[Quantity, "QuantityIndex"]:
+    def __getitem__(self, key: Any) -> Any:
         value = self.value[key]
         if isinstance(value, pandas.Index):
             return QuantityIndex(
@@ -1092,7 +1091,7 @@ class QuantityIndex(Quantity, pandas.Index):
             self._dtype,
         )
 
-    def __copy__(self) -> "QuantityIndex":
+    def __copy__(self) -> "QuantityIndex":  # type: ignore
         return self.copy(deep=False)
 
     def __deepcopy__(self, memo: Any = None) -> "QuantityIndex":
@@ -1100,7 +1099,7 @@ class QuantityIndex(Quantity, pandas.Index):
 
     def equals(self, other: pandas.api.extensions.ExtensionArray) -> bool:
         if not isinstance(other, QuantityIndex):
-            other = QuantityIndex(other, Scalar, self.scale, self._dtype)
+            other = QuantityIndex(other, Scalar, self.scale, self._dtype)  # type: ignore
         return self.dimension == other.dimension and self.scale == other.scale and self.value.equals(other.value)  # type: ignore
 
 
@@ -2141,7 +2140,7 @@ def trapz(y: Quantity, x: Optional[Quantity] = None, dx: Optional[Quantity] = No
 @_array_func(numpy.meshgrid)
 def meshgrid(*xi: Quantity, copy: bool = True, sparse: bool = False,
              indexing: str = 'xy') -> List[Tuple[Dimension, Scale]]:
-    return [(x.quantity, x.scale) for x in xi]
+    return [(x.dimension, x.scale) for x in xi]
 
 
 @_array_func(numpy.delete)

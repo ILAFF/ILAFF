@@ -125,7 +125,7 @@ setup(
     #
     # For an analysis of "install_requires" vs pip's requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
-    install_requires=["dataclasses;python_version<'3.7'", "numpy>=1.13", "resample>=1.5.1", "iminuit>=2.9.0", "xarray>=0.16", "numba>=0.48"],
+    install_requires=["dataclasses;python_version<'3.7'", "numpy>=1.13", "resample>=1.5.1", "iminuit>=2.9.0", "xarray>=0.16", "numba>=0.48", "pandas_stubs>=1.5"],
     # List additional groups of dependencies here (e.g. development
     # dependencies). Users will be able to install these using the "extras"
     # syntax, for example:
