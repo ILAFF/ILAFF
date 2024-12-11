@@ -122,7 +122,7 @@ class PartialModel(Model):
 
     def __post_init__(self):
         sig = signature(self.__wrapped__)
-        sig = sig.replace(parameters=(
+        sig = sig.replace(parameters=tuple(
             v
             for k, v in sig.parameters.items()
             if k not in self.kwargs
