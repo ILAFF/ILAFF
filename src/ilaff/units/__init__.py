@@ -86,13 +86,13 @@ Examples:
     >>> str(1.0 / n)
     '1.4616813244444444 fm'
     >>> m == o
-    False
+    np.False_
     >>> m != o
-    True
+    np.True_
     >>> m**2 == n * n
-    True
+    np.True_
     >>> o > m
-    True
+    np.True_
 
 
 In order to perform these operations, quantities must be converted to the same
@@ -121,7 +121,7 @@ Example:
         ...
     ValueError: Can't convert units: incompatible mass dimensions 1 and -1
     >>> m.in_unit(fm**-1)
-    0.6841436524340078
+    np.float64(0.6841436524340078)
 
 Quantities built from arrays can be indexed or iterated.
 

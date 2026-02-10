@@ -1390,11 +1390,6 @@ def amin(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
             return _match_units(numpy.amin, a, out, initial, labels={1: "'out'", 2: "'initial'"})
 
 
-@_array_func(numpy.alen)
-def alen(a: Quantity) -> None:
-    return None
-
-
 @_array_func(numpy.prod)
 def prod(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, dtype: Optional[Dtype] = None,
          out: Optional[Quantity] = None, keepdims: Optional[bool] = None,
@@ -1475,44 +1470,6 @@ def round(a: Quantity, decimals: int = 0, out: Optional[Quantity] = None) -> Tup
         return a.dimension, a.scale
     else:
         return _match_units(numpy.round, a, out, labels={1: "'out'"})
-
-
-@_array_func(numpy.product)
-def product(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
-            dtype: Optional[Dtype] = None, out: Optional[Quantity] = None,
-            keepdims: Optional[bool] = None, initial: Optional[Quantity] = None,
-            where: Optional[ArrayLike] = None) -> Tuple[Dimension, Scale]:
-    if out is None:
-        if initial is None:
-            return a.dimension, a.scale
-        else:
-            return _match_units(numpy.product, a, initial, labels={1: "'initial'"})
-    else:
-        if initial is None:
-            return _match_units(numpy.product, a, out, labels={1: "'out'"})
-        else:
-            return _match_units(numpy.product, a, out, initial, labels={1: "'out'", 2: "'initial'"})
-
-
-@_array_func(numpy.cumproduct)
-def cumproduct(a: Quantity, axis: Optional[int] = None, dtype: Optional[Dtype] = None,
-               out: Optional[Quantity] = None) -> Tuple[Dimension, Scale]:
-    if out is None:
-        return a.dimension, a.scale
-    else:
-        return _match_units(numpy.cumproduct, a, out, labels={1: "'out'"})
-
-
-@_array_func(numpy.sometrue)
-def sometrue(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
-             out: Optional[ArrayLike] = None, keepdims: Optional[bool] = None) -> None:
-    return None
-
-
-@_array_func(numpy.alltrue)
-def alltrue(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None,
-            out: Optional[ArrayLike] = None, keepdims: Optional[bool] = None) -> None:
-    return None
 
 
 @_array_func(numpy.linspace)
@@ -1952,11 +1909,6 @@ def sinc(x: Quantity) -> Tuple[Dimension, Scale]:
     return _scalar_units(numpy.sinc, x)
 
 
-@_array_func(numpy.msort)
-def msort(a: Quantity) -> Tuple[Dimension, Scale]:
-    return a.dimension, a.scale
-
-
 @_array_func(numpy.median)
 def median(a: Quantity, axis: Optional[Union[int, Sequence[int]]] = None, out: Optional[Quantity] = None,
            overwrite_input: bool = False, keepdims: bool = False) -> Tuple[Dimension, Scale]:
@@ -1983,16 +1935,6 @@ def quantile(a: Quantity, q: Quantity, axis: Optional[Union[int, Sequence[int]]]
     if out is not None:
         return _match_units(numpy.quantile, a, out, labels={1: "'out'"})
     return a.dimension, a.scale
-
-
-@_array_func(numpy.trapz)
-def trapz(y: Quantity, x: Optional[Quantity] = None, dx: Optional[Quantity] = None,
-          axis: int = -1) -> Tuple[Dimension, Scale]:
-    if x is not None:
-        return _multiply_units(numpy.trapz, y, x)
-    if dx is not None:
-        return _multiply_units(numpy.trapz, y, dx)
-    return y.dimension, y.scale
 
 
 @_array_func(numpy.meshgrid)
@@ -2160,12 +2102,6 @@ def setxor1d(ar1: Quantity, ar2: Quantity, assume_unique: bool = False) -> Tuple
     return _match_units(numpy.setxor1d, ar1, ar2)
 
 
-@_array_func(numpy.in1d)
-def in1d(ar1: Quantity, ar2: Quantity, assume_unique: bool = False, invert: bool = False) -> None:
-    _ = _match_units(numpy.in1d, ar1, ar2)
-    return None
-
-
 @_array_func(numpy.isin)
 def isin(element: Quantity, test_elements: Quantity, assume_unique: bool = False, invert: bool = False) -> None:
     _ = _match_units(numpy.isin, element, test_elements)
@@ -2202,11 +2138,6 @@ def isneginf(x: Quantity, out: Optional[Quantity] = None) -> None:
     if out is not None:
         _ = _match_units(numpy.isneginf, x, out, labels={1: "'out'"})
     return None
-
-
-@_array_func(numpy.asfarray)
-def asfarray(a: Quantity, dtype: Dtype = numpy.float64) -> Tuple[Dimension, Scale]:
-    return a.dimension, a.scale
 
 
 @_array_func(numpy.real)
@@ -2253,11 +2184,6 @@ def nan_to_num(val: Quantity, copy: bool = True, nan: Optional[Quantity] = None,
 
 @_array_func(numpy.real_if_close)
 def real_if_close(a: Quantity, tol: float = 100.) -> Tuple[Dimension, Scale]:
-    return a.dimension, a.scale
-
-
-@_array_func(numpy.asscalar)
-def asscalar(a: Quantity) -> Tuple[Dimension, Scale]:
     return a.dimension, a.scale
 
 
